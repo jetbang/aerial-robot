@@ -1,0 +1,9 @@
+%YAML:1.0
+pid: # horizontal position # horizontal velocity # vertical position # vertical velocity # yaw position # yaw velocity
+ - {kp:4.45, ki:1.30, kd:0, db:0, it:0, EMax:0, PMax:0, IMax:0, DMax:0, OMax:0}
+ - {kp:4.45, ki:1.30, kd:0, db:0, it:0, EMax:0, PMax:0, IMax:0, DMax:0, OMax:0}
+ - {kp:4.45, ki:1.30, kd:0, db:0, it:0, EMax:0, PMax:0, IMax:0, DMax:0, OMax:0}
+ - {kp:4.45, ki:1.30, kd:0, db:0, it:0, EMax:0, PMax:0, IMax:0, DMax:0, OMax:0}
+ - {kp:4.45, ki:1.30, kd:0, db:0, it:0, EMax:0, PMax:0, IMax:0, DMax:0, OMax:0}
+ - {kp:4.45, ki:1.30, kd:0, db:0, it:0, EMax:0, PMax:0, IMax:0, DMax:0, OMax:0}
+

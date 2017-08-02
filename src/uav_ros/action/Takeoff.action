@@ -1,0 +1,7 @@
+# altitude is in meters
+float32 altitude
+---
+bool result
+---
+#progress is in percent
+uint8 progress

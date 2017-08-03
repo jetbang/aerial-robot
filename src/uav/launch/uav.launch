@@ -1,0 +1,11 @@
+<launch>
+	<node pkg="uav" type="uav" name="uav" output="screen">
+	<param name="serial_port"         type="string" value="/dev/ttyTHS2"/>  
+  <param name="serial_baudrate"     type="int"    value="115200"/>
+	<param name="open_claw_cmd"       type="int"  	value="0"/>
+	<param name="close_claw_cmd"       type="int"  value="1"/>
+  <param name="spin_rate"           type="int"    value="50"/>
+	<param name="xy_err_tolerence"     type="float"  value="0.1"/>
+	<param name="z_err_tolerence"      type="float"  value="0.1"/>
+	</node>
+</launch>

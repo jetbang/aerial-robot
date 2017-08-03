@@ -14,24 +14,23 @@
  * limitations under the License.
  */
 
-#include "param.h"
+#include "cfg.h"
 
-using namespace uav_action_plan;
-
-void Param::fill_dropoint_param(geometry_msgs::Vector3& dropoint, const cv::FileNodeIterator& it)
+void Cfg::fill_dropoint_param(geometry_msgs::Vector3& dropoint, const cv::FileNodeIterator& it)
 {
     dropoint.x   = (double)(*it)["x"];
     dropoint.y   = (double)(*it)["y"];
     dropoint.z   = (double)(*it)["z"];
 
+    std::cout << "dropoint:" << std::endl;
     std::cout << (double)(*it)["x"] << "  ";
     std::cout << (double)(*it)["y"] << "  ";
     std::cout << (double)(*it)["z"] << std::endl;
 }
 
-bool Param::load_dropoint_param(geometry_msgs::Vector3& dropoint)
+bool Cfg::load_dropoint_param(geometry_msgs::Vector3& dropoint)
 {
-    cv::FileStorage fs("config/dropoint.yaml", cv::FileStorage::READ);
+    cv::FileStorage fs("src/uav_ros/config/dropoint.yaml", cv::FileStorage::READ);
     if( !fs.isOpened() ) // if we have file with parameters, read them
     {
         std::cout<<"ERROR, cannot open dropoint.yaml!"<<std::endl;
@@ -43,24 +42,39 @@ bool Param::load_dropoint_param(geometry_msgs::Vector3& dropoint)
     return true;
 }
 
-void Param::fill_pid_param(PID_t* pid, const cv::FileNodeIterator& it)
+void Cfg::fill_pid_param(PID_t* pid, const cv::FileNodeIterator& it)
 {
     pid->kp = (float)(*it)["kp"];
     pid->ki = (float)(*it)["ki"];
     pid->kd = (float)(*it)["kd"];
     pid->db = (float)(*it)["db"];
     pid->it = (float)(*it)["it"];
-    pid->EMax = (float)(*it)["EMax"];
-    pid->PMax = (float)(*it)["PMax"];
-    pid->IMax = (float)(*it)["IMax"];
-    pid->DMax = (float)(*it)["DMax"];
-    pid->OMax = (float)(*it)["OMax"];
+    pid->Emax = (float)(*it)["Emax"];
+    pid->Pmax = (float)(*it)["Pmax"];
+    pid->Imax = (float)(*it)["Imax"];
+    pid->Dmax = (float)(*it)["Dmax"];
+    pid->Omax = (float)(*it)["Omax"];
+
+    PID_Reset(pid);
+
+    std::cout << "pid param:" << std::endl;
+    std::cout << pid->kp << "  ";
+    std::cout << pid->ki << "  ";
+    std::cout << pid->kd << "  ";
+    std::cout << pid->db << "  ";
+    std::cout << pid->it << "  ";
+    std::cout << pid->Emax << "  ";
+    std::cout << pid->Pmax << "  ";
+    std::cout << pid->Imax << "  ";
+    std::cout << pid->Dmax << "  ";
+    std::cout << pid->Omax << "  ";
+    std::cout << std::endl;
 }
 
-bool Param::load_pid_param(PID_t* pid)
+bool Cfg::load_pid_param(PID_t* pid)
 {
-    cv::FileStorage fs("config/pid.yaml", cv::FileStorage::READ);
-    if( !fs.isOpened() ) // if we have file with parameters, read them
+    cv::FileStorage fs("src/uav_ros/config/pid.yaml", cv::FileStorage::READ);
+    if( !fs.isOpened()) // if we have file with parameters, read them
     {
         std::cout<<"ERROR, cannot open pid.yaml!"<<std::endl;
     }

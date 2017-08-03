@@ -13,30 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
- 
+
 #pragma once
 
 #include <ros/ros.h>
-#include <stdio.h>
-#include <dji_sdk/dji_drone.h>
-#include <cstdlib>
-#include <stdlib.h>
-#include <actionlib/client/simple_action_client.h>
-#include <actionlib/client/terminal_state.h>
-
-#include <geometry_msgs/TransformStamped.h> //IMU
-#include <geometry_msgs/Vector3Stamped.h> //velocity
-#include <sensor_msgs/LaserScan.h> //obstacle distance && ultrasonic
-
-#include "uav.h"
+#include <opencv2/opencv.hpp>
+#include <iostream>
+#include <geometry_msgs/Vector3.h>
 #include "pid.h"
 
-namespace uav
-{
-class Plan
+class Cfg
 {
 public:
-    UAV uav;
-    State state;
-}
-}
+    static void fill_dropoint_param(geometry_msgs::Vector3& dropoint, const cv::FileNodeIterator& it);
+    static void fill_pid_param(PID_t* pid, const cv::FileNodeIterator& it);
+    static bool load_dropoint_param(geometry_msgs::Vector3& dropoint);
+    static bool load_pid_param(PID_t* pid);
+};

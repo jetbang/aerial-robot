@@ -42,6 +42,10 @@
         "tuple": "cpp",
         "type_traits": "cpp",
         "typeinfo": "cpp",
-        "utility": "cpp"
+        "utility": "cpp",
+        "pid.c": "cpp",
+        "algorithm": "cpp",
+        "vector": "cpp",
+        "string": "cpp"
     }
 }

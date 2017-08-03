@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2017, Jack Mo (mobangjack@foxmail.com).
+ * Copyright (c) 2016, Jack Mo (mobangjack@foxmail.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,27 +14,23 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef __CRC8_H__
+#define __CRC8_H__
 
-#include <opencv2/opencv.hpp>
+#ifdef __cpluplus
+extern "C" {
+#endif
 
-#include <algorithm>
-#include <string>
-#include <vector>
+#include <stdint.h>
+#include <string.h>
 
-#include <geometry_msgs/Vector3.h> //velocity
+extern uint8_t CRC8Calc(const uint8_t* msg, uint16_t len, uint8_t crc8);
+extern uint8_t CRC8Check(const uint8_t* msg, uint16_t len, uint8_t crc8);
+extern uint8_t CRC8Append(uint8_t* msg, uint16_t len, uint8_t crc8);
 
-#include "pid.h"
-
-namespace uav_action_plan
-{
-class Param
-{
-public:
-    bool load_dropoint_param(geometry_msgs::Vector3& dropoint);
-    bool load_pid_param(PID_t* pid);
-protected:
-    void fill_dropoint_param(geometry_msgs::Vector3& dropoint, const cv::FileNodeIterator& it);
-    void fill_pid_param(PID_t* pid, const cv::FileNodeIterator& it);
+#ifdef __cpluplus
 }
-}
+#endif
+
+#endif
+

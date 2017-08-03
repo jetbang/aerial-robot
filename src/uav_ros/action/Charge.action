@@ -1,7 +1,0 @@
-# x,y,z are in meters, yaw is in angle
-float32 x
----
-bool result
----
-#progress is in percent
-uint8 progress 

@@ -18,7 +18,7 @@
 
 UAV::UAV() : nh("~"), debug(true), ws(STAND_BY), xy_err_tolerence(0.1), z_err_tolerence(0.1),
     uart_fd(-1), serial_port("/dev/ttyTHS2"), serial_baudrate(115200), spin_rate(50), 
-    open_claw_cmd(0), close_claw_cmd(1)
+    open_claw_cmd(0), close_claw_cmd(1), calied(false)
 {
     ros::NodeHandle np("~");
     np.param<std::string>("serial_port", serial_port, "/dev/ttyTHS2"); 
@@ -68,12 +68,21 @@ UAV::~UAV()
     if (uart_fd > 0)
     {
         uart_close(uart_fd);
+        uart_fd = -1;
     }
 }
 
 void UAV::position_callback(const geometry_msgs::Vector3Stamped& position)
 {
     g_pos = position;
+    if (!calied)
+    {
+        g_pos_bias = g_pos;
+        calied = true;
+    }
+    g_pos_calied.vector.x = g_pos.vector.x - g_pos_bias.vector.x;
+    g_pos_calied.vector.y = g_pos.vector.y - g_pos_bias.vector.y;
+    g_pos_calied.vector.z = g_pos.vector.z - g_pos_bias.vector.z;
     if (debug)
     {
         printf("frame_id: %s stamp: %d\n", g_pos.header.frame_id.c_str(), g_pos.header.stamp.sec);
@@ -231,6 +240,21 @@ bool UAV::cmd_claw(char c)
     return uart_write(uart_fd, buf, BUF_LEN) == BUF_LEN;
 }
 
+uint8_t UAV::stat_claw()
+{
+    #define BUF_LEN 4
+    uint8_t buf[BUF_LEN];
+    if (uart_read(uart_fd, buf, BUF_LEN) != BUF_LEN)
+    {
+        return 0xff;
+    }
+    if (buf[0] == 0xa5 && buf[2] == 0xfe && CRC8Check(buf, BUF_LEN, 0xff))
+    {
+        return buf[1];
+    }
+    return 0xff;
+}
+
 bool UAV::open_claw()
 {
     return cmd_claw(open_claw_cmd);
@@ -255,9 +279,9 @@ bool UAV::takeoff()
 
 bool UAV::fly_to_car()
 {
-    float x_err = v_pos.vector.x;
-    float y_err = v_pos.vector.y;
-    float z_err = g_pos.vector.z;
+    float x_err = dropoint.x - g_pos_calied.vector.x;
+    float y_err = dropoint.y - g_pos_calied.vector.y;
+    float z_err = dropoint.z - g_pos_calied.vector.z;
 
     if (x_err < xy_err_tolerence && y_err < xy_err_tolerence && z_err < z_err_tolerence)
     {
@@ -273,7 +297,7 @@ bool UAV::serve_car()
 {
     float x_err = v_pos.vector.x;
     float y_err = v_pos.vector.y;
-    float z_err = g_pos.vector.z;
+    float z_err = g_pos_calied.vector.z;
 
     if (x_err < xy_err_tolerence && y_err < xy_err_tolerence && z_err < z_err_tolerence)
     {
@@ -327,7 +351,7 @@ bool UAV::serve_park()
 {
     float x_err = v_pos.vector.x;
     float y_err = v_pos.vector.y;
-    float z_err = g_pos.vector.z;
+    float z_err = g_pos_calied.vector.z;
 
     if (x_err < xy_err_tolerence && y_err < xy_err_tolerence && z_err < z_err_tolerence)
     {
@@ -350,7 +374,6 @@ void UAV::stateMachine()
 {
     switch (ws)
     {
-        break;
         case GRABBING:
         if (grab())
         {
@@ -402,6 +425,8 @@ void UAV::stateMachine()
         case LANDING:
         if (land())
         {
+            detach(); // release drone control privilege
+            calied = false;
             ws = STAND_BY;
         }
         break;

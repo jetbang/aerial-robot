@@ -72,6 +72,9 @@ public:
     sensor_msgs::LaserScan g_scan; // Guidance ultrasonic scan feedback
     geometry_msgs::Vector3Stamped v_pos; // Vision target relative position feedback
 
+    geometry_msgs::Vector3Stamped g_pos_bias;  // Guidance position (Odometry) bias
+    geometry_msgs::Vector3Stamped g_pos_calied;  // Calibrated Guidance position (Odometry)
+
 protected:
     ros::NodeHandle nh;
     
@@ -97,6 +100,8 @@ protected:
     float xy_err_tolerence;
     float z_err_tolerence;
 
+    bool calied;
+
 
 protected:
     void position_callback(const geometry_msgs::Vector3Stamped& position);
@@ -115,6 +120,7 @@ public:
     bool cmd_claw(char c);
     bool open_claw();
     bool close_claw();
+    uint8_t stat_claw();
 
     bool grab();
     bool takeoff();
@@ -125,7 +131,8 @@ public:
     bool fly_back();
     bool serve_park();
     bool land();
-    
+    bool cali_guidance();
+
     void stateMachine(); // workstate machine
     void spin();
 };

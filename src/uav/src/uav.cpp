@@ -341,7 +341,9 @@ bool UAV::serve_park()
 
 bool UAV::land()
 {
-
+    //attach();
+    landing();
+    return true;
 }
 
 void UAV::stateMachine()
@@ -411,7 +413,7 @@ void UAV::stateMachine()
 
 void UAV::spin()
 {
-    ros::Rate rate(50);
+    ros::Rate rate(spin_rate);
     while (ros::ok())
     {
         ros::spinOnce();

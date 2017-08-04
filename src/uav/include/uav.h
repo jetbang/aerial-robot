@@ -21,6 +21,7 @@
 #include <dji_sdk/dji_drone.h>
 #include <cstdlib>
 #include <stdlib.h>
+#include <actionlib/server/simple_action_server.h>
 #include <actionlib/client/simple_action_client.h>
 #include <actionlib/client/terminal_state.h>
 
@@ -32,14 +33,20 @@
 #include <geometry_msgs/Vector3Stamped.h> //velocity
 #include <sensor_msgs/LaserScan.h> //obstacle distance && ultrasonic
 
-#include "uav/Charge.h"
+#include <deque>
 
+#include "uav/GuidanceNavAction.h"
+#include "uav/Charge.h"
+#include "uav/CmdClaw.h"
+#include "uav/StatClaw.h"
+
+#include "timer.h"
 #include "crc8.h"
 #include "uart.h"
 #include "pid.h"
 #include "cfg.h"
 
-//typedef actionlib::SimpleActionServer<uav::GuidanceAction> uav::GuidanceActionServer;
+using namespace DJI::onboardSDK;
 
 class UAV
 {
@@ -78,12 +85,28 @@ public:
 protected:
     ros::NodeHandle nh;
     
+    // subscribers
     ros::Subscriber velocity_sub;
     ros::Subscriber ultrasonic_sub;
     ros::Subscriber position_sub;
     ros::Subscriber vision_sub;    
 
+    // actions
+    typedef actionlib::SimpleActionServer<uav::GuidanceNavAction> GuidanceNavActionServer;
+
+    GuidanceNavActionServer* guidance_nav_action_server;
+    uav::GuidanceNavFeedback guidance_nav_feedback;
+    uav::GuidanceNavResult guidance_nav_result;
+
+    // services
     ros::ServiceServer charge_service;
+    ros::ServiceServer cmd_claw_service;
+    ros::ServiceServer stat_claw_service;
+
+protected:
+    // other member variables
+    //uint8_t cflag; // control flags
+
     Workstate ws;
 
     geometry_msgs::Vector3 dropoint;
@@ -100,28 +123,53 @@ protected:
     float xy_err_tolerence;
     float z_err_tolerence;
 
+    float vision_pos_coeff;
+    float takeoff_height;
+    float landing_height;
+
+    int serial_timeout;
+    int callback_timeout;
+
     bool calied;
 
+    Timer serial_comm_timer;
+    Timer position_callback_timer;
+    Timer velocity_callback_timer;
+    Timer ultrasonic_callback_timer;
+    Timer vision_callback_timer;
 
 protected:
+    // subscriber callbacks
     void position_callback(const geometry_msgs::Vector3Stamped& position);
     void velocity_callback(const geometry_msgs::Vector3Stamped& velocity);
     void ultrasonic_callback(const sensor_msgs::LaserScan& scan);
     void vision_callback(const geometry_msgs::Vector3Stamped& position);
-    bool charge_service_callback(uav::Charge::Request& request, uav::Charge::Response& response);
+
+    // action callbacks
+    bool guidance_nav_action_callback(const uav::GuidanceNavGoalConstPtr& goal);
+
+    // service callbacks
+    bool charge_callback(uav::Charge::Request& request, uav::Charge::Response& response);
+    bool cmd_claw_callback(uav::CmdClaw::Request& request, uav::CmdClaw::Response& response);
+    bool stat_claw_callback(uav::StatClaw::Request& request, uav::StatClaw::Response& response);
 
 public:
-    bool attach();
-    bool detach();
+    // low level control api
+    uint8_t status();
+    bool activate();
+    bool request_control();
+    bool release_control();
     bool takingoff();
     bool landing();
     bool control(unsigned char flag, float x, float y, float z, float yaw);
-    bool reduce_err(float x, float y, float z, float yaw);
+    bool pid_control(float x, float y, float z, float yaw);
     bool cmd_claw(char c);
     bool open_claw();
     bool close_claw();
     uint8_t stat_claw();
 
+public:
+    // state machine process oriented api
     bool grab();
     bool takeoff();
     bool fly_to_car();
@@ -131,8 +179,10 @@ public:
     bool fly_back();
     bool serve_park();
     bool land();
-    bool cali_guidance();
 
+    // state machine logic
     void stateMachine(); // workstate machine
+
+    // ros spin entrence
     void spin();
 };

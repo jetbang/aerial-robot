@@ -46,6 +46,7 @@
         "pid.c": "cpp",
         "algorithm": "cpp",
         "vector": "cpp",
-        "string": "cpp"
+        "string": "cpp",
+        "*.ipp": "cpp"
     }
 }

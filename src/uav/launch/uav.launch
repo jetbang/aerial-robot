@@ -5,7 +5,12 @@
 	<param name="open_claw_cmd"       type="int"  	value="0"/>
 	<param name="close_claw_cmd"       type="int"  value="1"/>
   <param name="spin_rate"           type="int"    value="50"/>
+	<param name="takeoff_height"     type="float"  value="1.0"/>
+	<param name="landing_height"     type="float"  value="0.3"/>
 	<param name="xy_err_tolerence"     type="float"  value="0.1"/>
 	<param name="z_err_tolerence"      type="float"  value="0.1"/>
+	<param name="vision_pos_coeff"      type="float"  value="0.001"/>
+	<param name="serial_timeout"      type="int"  value="400"/>
+	<param name="callback_timeout"      type="int"  value="400"/>
 	</node>
 </launch>

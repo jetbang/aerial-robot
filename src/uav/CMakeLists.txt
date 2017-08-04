@@ -24,13 +24,22 @@ set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
 add_service_files(
   FILES
   Charge.srv
+  CmdClaw.srv
+  StatClaw.srv
 )
 
-#add_action_files(
-#  FILES
-#)
+add_action_files(
+  FILES
+  GuidanceNav.action
+)
 
-generate_messages()
+generate_messages(
+  DEPENDENCIES
+  geometry_msgs 
+  nav_msgs
+  std_msgs
+  actionlib_msgs
+)
 
 catkin_package(
   INCLUDE_DIRS include
@@ -47,11 +56,16 @@ add_executable(uav src/uav.cpp
   src/pid.cpp 
   src/uart.cpp 
   src/crc8.cpp
+  src/timer.cpp
 )
 
+add_dependencies(uav
+  uav_generate_messages_cpp)
+
+## Specify libraries to link a library or executable target against
 target_link_libraries(uav
   ${OpenCV_LIBS}
   ${catkin_LIBRARIES}
 )
 
-#add_dependencies(uav dji_sdk_generate_messages_cpp)
+add_dependencies(uav uav_generate_messages_cpp)

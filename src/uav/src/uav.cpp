@@ -16,9 +16,13 @@
  
 #include "uav.h"
 
-UAV::UAV() : nh("~"), debug(true), ws(STAND_BY), xy_err_tolerence(0.1), z_err_tolerence(0.1),
+UAV::UAV() : nh("~"), debug(true), ws(STAND_BY), xy_err_tolerence(0.1f), z_err_tolerence(0.1f),
     uart_fd(-1), serial_port("/dev/ttyTHS2"), serial_baudrate(115200), spin_rate(50), 
-    open_claw_cmd(0), close_claw_cmd(1), calied(false)
+    open_claw_cmd(0), close_claw_cmd(1), calied(false), vision_pos_coeff(0.001f), 
+    takeoff_height(1.0f), landing_height(0.3f), serial_timeout(200), callback_timeout(200),
+    serial_comm_timer(callback_timeout), position_callback_timer(callback_timeout), 
+    velocity_callback_timer(callback_timeout), vision_callback_timer(callback_timeout), 
+    ultrasonic_callback_timer(callback_timeout)
 {
     ros::NodeHandle np("~");
     np.param<std::string>("serial_port", serial_port, "/dev/ttyTHS2"); 
@@ -28,6 +32,17 @@ UAV::UAV() : nh("~"), debug(true), ws(STAND_BY), xy_err_tolerence(0.1), z_err_to
     np.param<int>("spin_rate", spin_rate, 50);
     np.param<float>("xy_err_tolerence", xy_err_tolerence, 0.1f);
     np.param<float>("z_err_tolerence", z_err_tolerence, 0.1f);
+    np.param<float>("vision_pos_coeff", vision_pos_coeff, 0.001f);
+    np.param<float>("takeoff_height", takeoff_height, 1.0f);
+    np.param<float>("landing_height", landing_height, 0.3f);
+    np.param<int>("serial_timeout", serial_timeout, 200);
+    np.param<int>("callback_timeout", callback_timeout, 200);
+
+    serial_comm_timer.reset(serial_timeout);
+    position_callback_timer.reset(callback_timeout);
+    velocity_callback_timer.reset(callback_timeout);
+    ultrasonic_callback_timer.reset(callback_timeout);
+    vision_callback_timer.reset(callback_timeout);
 
     int ret = uart_open(&uart_fd, serial_port.c_str(), serial_baudrate, UART_OFLAG_RD);
     if (ret < 0) {
@@ -42,16 +57,32 @@ UAV::UAV() : nh("~"), debug(true), ws(STAND_BY), xy_err_tolerence(0.1), z_err_to
     Cfg::load_pid_param(pid);
 
     // initialize subscribers
-    position_sub = nh.subscribe("/guidance/position", 1, &UAV::position_callback, this);
-    velocity_sub = nh.subscribe("/guidance/velocity", 1, &UAV::velocity_callback, this);
+    position_sub = nh.subscribe("/uav/position", 1, &UAV::position_callback, this);
+    velocity_sub = nh.subscribe("/uav/velocity", 1, &UAV::velocity_callback, this);
     ultrasonic_sub = nh.subscribe("/guidance/ultrasonic", 1, &UAV::ultrasonic_callback, this);
     vision_sub = nh.subscribe("/vision/position", 1, &UAV::vision_callback, this);
 
+    // initialize actions
+    guidance_nav_action_server = new GuidanceNavActionServer(nh,
+            "guidance_nav_action",
+            boost::bind(&UAV::guidance_nav_action_callback, this, _1), false);
+    guidance_nav_action_server->start();
+
     // initialize services
-    charge_service  = nh.advertiseService("charge", &UAV::charge_service_callback, this);
+    charge_service  = nh.advertiseService("charge", &UAV::charge_callback, this);
+    cmd_claw_service  = nh.advertiseService("cmd_claw", &UAV::cmd_claw_callback, this);
+    stat_claw_service  = nh.advertiseService("stat_claw", &UAV::stat_claw_callback, this);
 
     // initialize dji drone
     drone = new DJIDrone(nh);
+
+/*
+    cflag = Flight::HorizontalLogic::HORIZONTAL_POSITION |
+                            Flight::VerticalLogic::VERTICAL_VELOCITY |
+                            Flight::YawLogic::YAW_ANGLE |
+                            Flight::HorizontalCoordinate::HORIZONTAL_BODY |
+                            Flight::SmoothMode::SMOOTH_ENABLE;
+*/
 
     std::cout << "                                                                         \n       111                      111                                      \n       111                      111                                      \n       111             1111     111                                      \n       111             1111     111                                      \n       111             1111     111                                      \n       111  1111111  111111111  11111111   1111111  111111111   11111111 \n       111 1111 1111   1111     1111 111  1111 111  11111 111  111 111   \n       111 111   111   1111     111  1111 11    111 1111  111  111  111  \n 111   111 111111111   1111     111   111    111111 111   111  111 1111  \n 111   111 111         1111     111   111 111111111 111   111  1111111   \n 111  1111 111         1111     111   111 111   111 111   111  111111    \n 111  111  1111  111    111     111  1111 111  1111 111   111  111       \n  1111111   11111111    111111  11111111  111111111 111   111  11111111  \n   11111     11111       11111  1111111    11111111 111   111  111  1111 \n                                                              111    111 \n                                                               11111111  " << std::endl;
 
@@ -74,12 +105,14 @@ UAV::~UAV()
 
 void UAV::position_callback(const geometry_msgs::Vector3Stamped& position)
 {
+    position_callback_timer.reset(callback_timeout);
     g_pos = position;
     if (!calied)
     {
         g_pos_bias = g_pos;
         calied = true;
     }
+    g_pos_calied.header =  g_pos.header;
     g_pos_calied.vector.x = g_pos.vector.x - g_pos_bias.vector.x;
     g_pos_calied.vector.y = g_pos.vector.y - g_pos_bias.vector.y;
     g_pos_calied.vector.z = g_pos.vector.z - g_pos_bias.vector.z;
@@ -93,6 +126,7 @@ void UAV::position_callback(const geometry_msgs::Vector3Stamped& position)
 
 void UAV::velocity_callback(const geometry_msgs::Vector3Stamped& velocity)
 {
+    velocity_callback_timer.reset(callback_timeout);
     g_vel = velocity;
     if (debug)
     {
@@ -103,6 +137,7 @@ void UAV::velocity_callback(const geometry_msgs::Vector3Stamped& velocity)
 
 void UAV::ultrasonic_callback(const sensor_msgs::LaserScan& scan)
 {
+    ultrasonic_callback_timer.reset(callback_timeout);
     g_scan = scan;
     if (debug)
     {
@@ -114,6 +149,7 @@ void UAV::ultrasonic_callback(const sensor_msgs::LaserScan& scan)
 
 void UAV::vision_callback(const geometry_msgs::Vector3Stamped& position)
 {
+    vision_callback_timer.reset(callback_timeout);
     v_pos = position;
     if (debug)
     {
@@ -123,7 +159,65 @@ void UAV::vision_callback(const geometry_msgs::Vector3Stamped& position)
     }
 }
 
-bool UAV::charge_service_callback(uav::Charge::Request& request, uav::Charge::Response& response)
+bool UAV::guidance_nav_action_callback(const uav::GuidanceNavGoalConstPtr& goal)
+{
+  float dst_x = goal->x;
+  float dst_y = goal->y;
+  float dst_z = goal->z;
+
+  float org_x = g_pos_calied.vector.x;
+  float org_y = g_pos_calied.vector.y;
+  float org_z = g_pos_calied.vector.z;
+
+  float dis_x = dst_x - org_x;
+  float dis_y = dst_y - org_y;
+  float dis_z = dst_z - org_z; 
+
+  float det_x, det_y, det_z;
+
+  DJI::onboardSDK::FlightData flight_ctrl_data;
+  flight_ctrl_data.flag = 0x90;
+  flight_ctrl_data.z = dst_z;
+  flight_ctrl_data.yaw = 0;
+
+  int x_progress = 0; 
+  int y_progress = 0; 
+  int z_progress = 0; 
+  while (x_progress < 100 || y_progress < 100 || z_progress <100) {
+
+     flight_ctrl_data.x = dst_x - g_pos_calied.vector.x;
+     flight_ctrl_data.y = dst_y - g_pos_calied.vector.y;
+     control(flight_ctrl_data.flag, flight_ctrl_data.x, flight_ctrl_data.y, flight_ctrl_data.z, flight_ctrl_data.yaw);
+
+     det_x = (100 * (dst_x - g_pos_calied.vector.x)) / dis_x;
+     det_y = (100 * (dst_y - g_pos_calied.vector.y)) / dis_y;
+     det_z = (100 * (dst_z - g_pos_calied.vector.z)) / dis_z;
+
+     x_progress = 100 - (int)det_x;
+     y_progress = 100 - (int)det_y;
+     z_progress = 100 - (int)det_z;
+
+     //lazy evaluation
+     if (std::abs(dst_x - g_pos_calied.vector.x) < 0.1) x_progress = 100;
+     if (std::abs(dst_y - g_pos_calied.vector.y) < 0.1) y_progress = 100;
+     if (std::abs(dst_z - g_pos_calied.vector.z) < 0.1) z_progress = 100;
+
+     guidance_nav_feedback.x_progress = x_progress;
+     guidance_nav_feedback.y_progress = y_progress;
+     guidance_nav_feedback.z_progress = z_progress;
+
+     guidance_nav_action_server->publishFeedback(guidance_nav_feedback);
+
+     usleep(20000);
+  }
+
+  guidance_nav_result.result = true;
+  guidance_nav_action_server->setSucceeded(guidance_nav_result);
+
+  return true;
+}
+
+bool UAV::charge_callback(uav::Charge::Request& request, uav::Charge::Response& response)
 {
     if (ws == STAND_BY)
     {
@@ -133,22 +227,63 @@ bool UAV::charge_service_callback(uav::Charge::Request& request, uav::Charge::Re
     return true;
 }
 
-bool UAV::attach()
+bool UAV::cmd_claw_callback(uav::CmdClaw::Request& request, uav::CmdClaw::Response& response)
 {
-    bool result = drone->request_sdk_permission_control();
+    uint8_t cmd = request.cmd;
+    cmd_claw(cmd);
+    uint8_t claw_stat = stat_claw();
+    response.result = claw_stat;
+    return true;
+}
+
+bool UAV::stat_claw_callback(uav::StatClaw::Request& request, uav::StatClaw::Response& response)
+{
+    uint8_t claw_stat = stat_claw();
+    response.result = claw_stat;
+    return true;
+}
+
+// 1  	standby
+// 2 	take_off
+// 3 	in_air
+// 4 	landing
+// 5 	finish_landing
+uint8_t UAV::status()
+{
+    uint8_t result = drone->flight_status;
     if (debug)
     {
-        printf( "UAV::attach result: %d\n", result);
+        printf( "UAV::status result: %d\n", result);
     }
     return result;
 }
 
-bool UAV::detach()
+bool UAV::activate()
+{
+    bool result = drone->activate();
+    if (debug)
+    {
+        printf( "UAV::activate result: %d\n", result);
+    }
+    return result;
+}
+
+bool UAV::request_control()
+{
+    bool result = drone->request_sdk_permission_control();
+    if (debug)
+    {
+        printf( "UAV::request_control result: %d\n", result);
+    }
+    return result;
+}
+
+bool UAV::release_control()
 {
     bool result = drone->release_sdk_permission_control();
     if (debug)
     {
-        printf( "UAV::detach result: %d\n", result);
+        printf( "UAV::release_control result: %d\n", result);
     }
     return result;
 }
@@ -183,27 +318,27 @@ bool UAV::control(unsigned char flag, float x, float y, float z, float yaw)
     return result;
 }
 
-bool UAV::reduce_err(float x, float y, float z, float yaw = 0)
+bool UAV::pid_control(float x = 0, float y = 0, float z = 0, float yaw = 0)
 {
     float ref = 0;
     float fdb = 0;
 
-    ref = g_pos.vector.x + x;
-    fdb = g_pos.vector.x;
+    ref = g_pos_calied.vector.x + x;
+    fdb = g_pos_calied.vector.x;
     PID_Calc(&pid[0], ref, fdb);
     ref = pid[0].out;
     fdb = g_vel.vector.x;
     PID_Calc(&pid[1], ref, fdb);
 
-    ref = g_pos.vector.y + y;
-    fdb = g_pos.vector.y;
+    ref = g_pos_calied.vector.y + y;
+    fdb = g_pos_calied.vector.y;
     PID_Calc(&pid[2], ref, fdb);
     ref = pid[2].out;
     fdb = g_vel.vector.y;
     PID_Calc(&pid[3], ref, fdb);
 
-    ref = g_pos.vector.z + z;
-    fdb = g_pos.vector.z;
+    ref = g_pos_calied.vector.z + z;
+    fdb = g_pos_calied.vector.z;
     PID_Calc(&pid[4], ref, fdb);
     ref = pid[4].out;
     fdb = g_vel.vector.z;
@@ -211,8 +346,8 @@ bool UAV::reduce_err(float x, float y, float z, float yaw = 0)
     
     /*
     float g_yaw = tf::getYaw(g_)
-    ref = g_pos.vector.yaw + yaw;
-    fdb = g_pos.vector.yaw;
+    ref = g_pos_calied.vector.yaw + yaw;
+    fdb = g_pos_calied.vector.yaw;
     PID_Calc(&pid[6], ref, fdb);
     ref = pid[6].out;
     fdb = g_vel.vector.yaw;
@@ -224,7 +359,13 @@ bool UAV::reduce_err(float x, float y, float z, float yaw = 0)
     float z_thr = pid[5].out;
     float yaw_thr = pid[7].out;
 
-    bool result = control(0x40, x_thr, y_thr, z_thr, yaw_thr);
+    uint8_t cflag = Flight::HorizontalLogic::HORIZONTAL_POSITION |
+                        Flight::VerticalLogic::VERTICAL_VELOCITY |
+                        Flight::YawLogic::YAW_ANGLE |
+                        Flight::HorizontalCoordinate::HORIZONTAL_BODY |
+                        Flight::SmoothMode::SMOOTH_ENABLE;
+
+    bool result = control(cflag, x_thr, y_thr, z_thr, yaw_thr);
 
     return result;
 }
@@ -242,8 +383,9 @@ bool UAV::cmd_claw(char c)
 
 uint8_t UAV::stat_claw()
 {
-    #define BUF_LEN 4
+     #define BUF_LEN 4
     uint8_t buf[BUF_LEN];
+    /*
     if (uart_read(uart_fd, buf, BUF_LEN) != BUF_LEN)
     {
         return 0xff;
@@ -251,6 +393,33 @@ uint8_t UAV::stat_claw()
     if (buf[0] == 0xa5 && buf[2] == 0xfe && CRC8Check(buf, BUF_LEN, 0xff))
     {
         return buf[1];
+    }
+    */
+    std::deque<uint8_t> que(BUF_LEN);
+    Timer timer(serial_timeout);
+    while (!timer.timeout())
+    {
+        uint8_t tmp;
+        int len = uart_read(uart_fd, &tmp, 1);
+        if (len == 1)
+        {
+            que.push_front(tmp);
+        }
+        if (que.size() == BUF_LEN)
+        {
+            for (int i = 0; i < BUF_LEN; i++)
+            {
+                buf[i] = que[i];
+            }
+            if (buf[0] == 0xa5 && buf[2] == 0xfe && CRC8Check(buf, BUF_LEN, 0xff))
+            {
+                return buf[1];
+            }
+            else
+            {
+                que.pop_back();
+            }
+        }
     }
     return 0xff;
 }
@@ -265,22 +434,48 @@ bool UAV::close_claw()
     return cmd_claw(close_claw_cmd);
 }
 
+// state machine process
 bool UAV::grab()
 {
+    if (stat_claw() == close_claw_cmd)
+    {
+        return true;
+    }
     close_claw();
-    return true;
+    return false;
 }
 
 bool UAV::takeoff()
 {
+    if (status() == 3 && g_pos_calied.vector.z < -takeoff_height)
+    {
+        return true;
+    }
     takingoff();
-    return true;
+    return false;
 }
 
 bool UAV::fly_to_car()
 {
     float x_err = dropoint.x - g_pos_calied.vector.x;
     float y_err = dropoint.y - g_pos_calied.vector.y;
+    // float z_err = dropoint.z - g_pos_calied.vector.z;
+    float z_err = 0;
+
+    if (x_err < xy_err_tolerence && y_err < xy_err_tolerence && z_err < z_err_tolerence)
+    {
+        return true;
+    }
+
+    pid_control(x_err, y_err, z_err);
+
+    return false;
+}
+
+bool UAV::serve_car()
+{
+    float x_err = v_pos.vector.x * vision_pos_coeff;
+    float y_err = v_pos.vector.y * vision_pos_coeff;
     float z_err = dropoint.z - g_pos_calied.vector.z;
 
     if (x_err < xy_err_tolerence && y_err < xy_err_tolerence && z_err < z_err_tolerence)
@@ -288,102 +483,120 @@ bool UAV::fly_to_car()
         return true;
     }
 
-    reduce_err(x_err, y_err, z_err);
-
-    return false;
-}
-
-bool UAV::serve_car()
-{
-    float x_err = v_pos.vector.x;
-    float y_err = v_pos.vector.y;
-    float z_err = g_pos_calied.vector.z;
-
-    if (x_err < xy_err_tolerence && y_err < xy_err_tolerence && z_err < z_err_tolerence)
-    {
-        return true;
-    }
-
-    reduce_err(x_err, y_err, z_err);
+    pid_control(x_err, y_err, z_err);
 
     return false;
 }
 
 bool UAV::air_drop()
 {
+    if (stat_claw() == open_claw_cmd)
+    {
+        return true;
+    }
     open_claw();
-    return true;
+    return false;
 }
 
 bool UAV::ascend()
 {
-    float x_err = v_pos.vector.x;
-    float y_err = v_pos.vector.y;
-    float z_err = g_pos.vector.z;
+    // float x_err = dropoint.x - g_pos_calied.vector.x;
+    // float y_err = dropoint.y - g_pos_calied.vector.y;
+    // float z_err = dropoint.z - g_pos_calied.vector.z;
+    float x_err = 0;
+    float y_err = 0;
+    float z_err = -takeoff_height - g_pos_calied.vector.z;
 
     if (x_err < xy_err_tolerence && y_err < xy_err_tolerence && z_err < z_err_tolerence)
     {
         return true;
     }
 
-    reduce_err(x_err, y_err, z_err);
+    pid_control(x_err, y_err, z_err);
 
     return false;
 }
 
 bool UAV::fly_back()
 {
-    float x_err = v_pos.vector.x;
-    float y_err = v_pos.vector.y;
-    float z_err = g_pos.vector.z;
+    float x_err = g_pos_calied.vector.x;
+    float y_err = g_pos_calied.vector.y;
+    float z_err = 0;
 
     if (x_err < xy_err_tolerence && y_err < xy_err_tolerence && z_err < z_err_tolerence)
     {
         return true;
     }
 
-    reduce_err(x_err, y_err, z_err);
+    pid_control(x_err, y_err, z_err);
 
     return false;
 }
 
 bool UAV::serve_park()
 {
-    float x_err = v_pos.vector.x;
-    float y_err = v_pos.vector.y;
-    float z_err = g_pos_calied.vector.z;
+    float x_err = v_pos.vector.x * vision_pos_coeff;
+    float y_err = v_pos.vector.y * vision_pos_coeff;
+    float z_err = -landing_height - g_pos_calied.vector.z;
 
     if (x_err < xy_err_tolerence && y_err < xy_err_tolerence && z_err < z_err_tolerence)
     {
         return true;
     }
 
-    reduce_err(x_err, y_err, z_err);
+    pid_control(x_err, y_err, z_err);
 
     return false;
 }
 
 bool UAV::land()
 {
-    //attach();
+    if (status() == 5)
+    {
+        return true;
+    }
     landing();
-    return true;
+    return false;
 }
 
 void UAV::stateMachine()
 {
+    if (stat_claw() != 0xff)
+    {
+        serial_comm_timer.reset(serial_timeout);
+    }
+    if (serial_comm_timer.timeout() || position_callback_timer.timeout() || 
+        velocity_callback_timer.timeout() || ultrasonic_callback_timer.timeout() || 
+        vision_callback_timer.timeout())
+    {
+        std::cout << "stateMachine: sensor connection error, uav was forced to stand by!" << std::endl;
+        release_control();
+        ws = STAND_BY;
+        return;
+    }
     switch (ws)
     {
         case GRABBING:
         if (grab())
         {
-            ws = TAKING_OFF;
+            if (request_control())
+            {
+                ws = TAKING_OFF;
+            }
+        }
+        else
+        {
+            std::cout << "stateMachine: grabing " << std::endl;
         }
         break;
         case TAKING_OFF:
-        if (attach() && takeoff())
+        if (takeoff())
         {
             ws = FLYING_TO_CAR;
+        }
+        else
+        {
+            std::cout << "stateMachine: taking off " << std::endl;
         }
         break;
         case FLYING_TO_CAR:
@@ -391,11 +604,19 @@ void UAV::stateMachine()
         {
             ws = SERVING_CAR;
         }
+        else
+        {
+            std::cout << "stateMachine: flying to car " << std::endl;
+        }
         break;
         case SERVING_CAR:
         if (serve_car())
         {
             ws = AIR_DROPPING;
+        }
+        else
+        {
+            std::cout << "stateMachine: serving car " << std::endl;
         }
         break;
         case AIR_DROPPING:
@@ -403,11 +624,19 @@ void UAV::stateMachine()
         {
             ws = ASCENDING;
         }
+        else
+        {
+            std::cout << "stateMachine: air-droping " << std::endl;
+        }
         break;
         case ASCENDING:
         if (ascend())
         {
             ws = FLYING_BACK;
+        }
+        else
+        {
+            std::cout << "stateMachine: ascending " << std::endl;
         }
         break;
         case FLYING_BACK:
@@ -415,23 +644,37 @@ void UAV::stateMachine()
         {
             ws = SERVING_PARK;
         }
+        else
+        {
+            std::cout << "stateMachine: flying back " << std::endl;
+        }
         break;
         case SERVING_PARK:
         if (serve_park())
         {
             ws = LANDING;
         }
+        else
+        {
+            std::cout << "stateMachine: serving park " << std::endl;
+        }
         break;
         case LANDING:
         if (land())
         {
-            detach(); // release drone control privilege
+            release_control(); // release drone control privilege
             calied = false;
             ws = STAND_BY;
+        }
+        else
+        {
+            std::cout << "stateMachine: landing " << std::endl;
         }
         break;
         default:
         ws = STAND_BY;
+        release_control();
+        std::cout << "stateMachine: stand-by " << std::endl;
         break;
     }
 }

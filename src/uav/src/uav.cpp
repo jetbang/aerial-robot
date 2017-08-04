@@ -57,8 +57,8 @@ UAV::UAV() : nh("~"), debug(true), ws(STAND_BY), xy_err_tolerence(0.1f), z_err_t
     Cfg::load_pid_param(pid);
 
     // initialize subscribers
-    position_sub = nh.subscribe("/uav/position", 1, &UAV::position_callback, this);
-    velocity_sub = nh.subscribe("/uav/velocity", 1, &UAV::velocity_callback, this);
+    position_sub = nh.subscribe("/guidance/position", 1, &UAV::position_callback, this);
+    velocity_sub = nh.subscribe("/guidance/velocity", 1, &UAV::velocity_callback, this);
     ultrasonic_sub = nh.subscribe("/guidance/ultrasonic", 1, &UAV::ultrasonic_callback, this);
     vision_sub = nh.subscribe("/vision/position", 1, &UAV::vision_callback, this);
 
@@ -359,7 +359,7 @@ bool UAV::pid_control(float x = 0, float y = 0, float z = 0, float yaw = 0)
     float z_thr = pid[5].out;
     float yaw_thr = pid[7].out;
 
-    uint8_t cflag = Flight::HorizontalLogic::HORIZONTAL_POSITION |
+    uint8_t cflag = Flight::HorizontalLogic::HORIZONTAL_VELOCITY |
                         Flight::VerticalLogic::VERTICAL_VELOCITY |
                         Flight::YawLogic::YAW_ANGLE |
                         Flight::HorizontalCoordinate::HORIZONTAL_BODY |

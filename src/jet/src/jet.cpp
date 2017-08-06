@@ -20,9 +20,11 @@ Jet::Jet(ros::NodeHandle& nh) : drone(nh), uart_fd(-1), calied(false)
 {
     this->nh = nh;
 
-    nh.param<int>("spin_rate", spin_rate, 50);
-    nh.param<std::string>("serial_port", serial_port, "/dev/ttyTHS2"); 
-    nh.param<int>("serial_baudrate", serial_baudrate, 115200);
+    ros::NodeHandle np("~");
+
+    np.param<int>("spin_rate", spin_rate, 50);
+    np.param<std::string>("serial_port", serial_port, "/dev/ttyTHS2"); 
+    np.param<int>("serial_baudrate", serial_baudrate, 115200);
 
     int ret = uart_open(&uart_fd, serial_port.c_str(), serial_baudrate, UART_OFLAG_WR);
     if (ret < 0) {
@@ -60,6 +62,11 @@ Jet::Jet(ros::NodeHandle& nh) : drone(nh), uart_fd(-1), calied(false)
 Jet::~Jet()
 {
     delete jet_nav_action_server;
+    if (uart_fd != -1)
+    {
+        close(uart_fd);
+        uart_fd = -1;
+    }
 }
 
 void Jet::load_dropoint_param(ros::NodeHandle& nh)
@@ -205,7 +212,7 @@ bool Jet::cmd_grabber(uint8_t c)
     buf[0] = 0xa5;
     buf[1] = c;
     buf[2] = 0xfe;
-    CRC8Append(buf, 0, 0xff);
+    CRC8Append(buf, 4, 0xff);
     return (write(uart_fd, buf, 4) == 4);
 }
 

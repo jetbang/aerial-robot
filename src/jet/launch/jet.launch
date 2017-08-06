@@ -9,7 +9,7 @@
 
 	<node pkg="jet" type="jet" name="jet" output="screen">
 	<param name="spin_rate"           type="int"    value="50"/>
-	<param name="serial_port"         type="string" value="/dev/ttyUSB0"/>  
+	<param name="serial_port"         type="string" value="/dev/ttyUSB1"/>  
   	<param name="serial_baudrate"     type="int"    value="115200"/>
 	<remap from="/guidance/odom" to="/dji_sdk/odometry" />
 	</node>

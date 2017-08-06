@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(uav)
+project(jet)
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
@@ -24,13 +24,13 @@ set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
 add_service_files(
   FILES
   Charge.srv
-  CmdClaw.srv
-  StatClaw.srv
+  CmdGrabber.srv
+  StatGrabber.srv
 )
 
 add_action_files(
   FILES
-  GuidanceNav.action
+  JetNav.action
 )
 
 generate_messages(
@@ -51,28 +51,20 @@ include_directories(
  	${catkin_INCLUDE_DIRS}
 )
 
-add_executable(uav src/uav.cpp
+add_executable(jet src/jet.cpp
   src/pid.cpp 
   src/uart.cpp 
   src/crc8.cpp
   src/kbhit.cpp
 )
 
-add_dependencies(uav
-  uav_generate_messages_cpp)
+add_dependencies(jet
+  jet_generate_messages_cpp)
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(uav
+target_link_libraries(jet
   ${OpenCV_LIBS}
   ${catkin_LIBRARIES}
 )
 
-add_dependencies(uav uav_generate_messages_cpp)
-
-add_executable(uav_test src/test.cpp)
-
-target_link_libraries(uav_test
-  ${catkin_LIBRARIES}
-)
-
-add_dependencies(uav_test dji_sdk_generate_messages_cpp)
+add_dependencies(jet jet_generate_messages_cpp)

@@ -1,0 +1,7 @@
+<launch>
+	<rosparam command="load" file="$(find jet)/config/pid.yaml" />
+	<rosparam command="load" file="$(find jet)/config/vision.yaml" />
+	<rosparam command="load" file="$(find jet)/config/flight.yaml" />
+	<rosparam command="load" file="$(find jet)/config/dropoint.yaml" />
+</launch>
+

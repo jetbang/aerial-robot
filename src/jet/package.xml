@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
-  <name>uav</name>
+  <name>jet</name>
   <version>1.0.0</version>
-  <description>The uav package</description>
+  <description>The jet package</description>
   <maintainer email="mobangjack@foxmail.com">Jack Mo</maintainer>
 
   <license>Apache 2.0</license>

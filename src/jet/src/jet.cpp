@@ -32,6 +32,7 @@ Jet::Jet(ros::NodeHandle& nh) : drone(nh), uart_fd(-1), calied(false)
                 , serial_port.c_str());
     }
 
+    charge_srv = nh.advertiseService("/charge", &Jet::charge_callback, this);
     cmd_grabber_srv = nh.advertiseService("/grabber/cmd", &Jet::cmd_grabber_callback, this);
     stat_grabber_srv = nh.advertiseService("/grabber/stat", &Jet::stat_grabber_callback, this);
 
@@ -53,7 +54,7 @@ Jet::Jet(ros::NodeHandle& nh) : drone(nh), uart_fd(-1), calied(false)
     load_dropoint_param(nh);
 
     jet_nav_action_server = new JetNavActionServer(nh,
-            "jet/nav_action",
+            "jet_nav_action",
             boost::bind(&Jet::jet_nav_action_callback, this, _1), false);
     jet_nav_action_server->start();
 
@@ -170,6 +171,13 @@ void Jet::vision_callback(const geometry_msgs::Vector3Stamped& position)
     vision_target_pos = position;
 }
 
+bool Jet::charge_callback(jet::Charge::Request& request, jet::Charge::Response& response)
+{
+    response.result = status();
+    jet_state = GRAB_BULLETS;
+    return true;
+}
+
 bool Jet::cmd_grabber_callback(jet::CmdGrabber::Request& request, jet::CmdGrabber::Response& response)
 {
     response.result = cmd_grabber(request.cmd);
@@ -213,7 +221,8 @@ bool Jet::cmd_grabber(uint8_t c)
     buf[1] = c;
     buf[2] = 0xfe;
     CRC8Append(buf, 4, 0xff);
-    return (write(uart_fd, buf, 4) == 4);
+    write(uart_fd, buf, 4);
+    return true;
 }
 
 uint8_t Jet::stat_grabber()
@@ -292,6 +301,70 @@ bool Jet::pid_control(uint8_t ground, float x, float y, float z, float yaw)
     std::cout << "ox: " << ox << ", oy: " << oy << ", oz: " << oz << ", oyaw: " << oyaw << std::endl;
 
     return goal_reached();
+}
+
+
+bool Jet::jet_nav_action_callback(const jet::JetNavGoalConstPtr& goal)
+{
+    float dst_x = goal->x;
+    float dst_y = goal->y;
+    float dst_z = goal->z;
+    float dst_yaw = goal->yaw;
+
+    float org_x = odom_calied.pose.pose.position.x;
+    float org_y = odom_calied.pose.pose.position.y;
+    float org_z = odom_calied.pose.pose.position.z;
+    float org_yaw = tf::getYaw(odom_calied.pose.pose.orientation);
+
+    float dis_x = dst_x - org_x;
+    float dis_y = dst_y - org_y;
+    float dis_z = dst_z - org_z; 
+    float dis_yaw = dst_yaw - org_yaw;
+
+    int x_progress = 0; 
+    int y_progress = 0; 
+    int z_progress = 0; 
+    int yaw_progress = 0;
+
+    while (x_progress < 100 || y_progress < 100 || z_progress < 100 || yaw_progress < 100) {
+
+        float x = dst_x - odom_calied.pose.pose.position.x;
+        float y = dst_y - odom_calied.pose.pose.position.y;
+        float z = dst_z - odom_calied.pose.pose.position.z;
+        float yaw = dst_yaw - tf::getYaw(odom_calied.pose.pose.orientation);
+
+        pid_control(1, x, y, z, yaw);
+
+        float det_x = (100 * x) / dis_x;
+        float det_y = (100 * y) / dis_y;
+        float det_z = (100 * z) / dis_z;
+        float det_yaw = (100 * yaw) / dis_yaw;
+
+        x_progress = 100 - (int)det_x;
+        y_progress = 100 - (int)det_y;
+        z_progress = 100 - (int)det_z;
+        yaw_progress = 100 - (int)det_yaw;
+
+        //lazy evaluation
+        if (pid[0].out == 0) x_progress = 100;
+        if (pid[1].out == 0) y_progress = 100;
+        if (pid[2].out == 0) z_progress = 100;
+        if (pid[3].out == 0) yaw_progress = 100;
+
+        jet_nav_feedback.x_progress = x_progress;
+        jet_nav_feedback.y_progress = y_progress;
+        jet_nav_feedback.z_progress = z_progress;
+        jet_nav_feedback.yaw_progress = yaw_progress;
+
+        jet_nav_action_server->publishFeedback(jet_nav_feedback);
+
+        usleep(20000); // 50hz
+    }
+
+    jet_nav_result.result = true;
+    jet_nav_action_server->setSucceeded(jet_nav_result);
+
+    return true;
 }
 
 uint8_t Jet::status()
@@ -423,102 +496,214 @@ bool Jet::action(uint8_t cmd)
     }
 }
 
-bool Jet::jet_nav_action_callback(const jet::JetNavGoalConstPtr& goal)
-{
-    float dst_x = goal->x;
-    float dst_y = goal->y;
-    float dst_z = goal->z;
-    float dst_yaw = goal->yaw;
-
-    float org_x = odom_calied.pose.pose.position.x;
-    float org_y = odom_calied.pose.pose.position.y;
-    float org_z = odom_calied.pose.pose.position.z;
-    float org_yaw = tf::getYaw(odom_calied.pose.pose.orientation);
-
-    float dis_x = dst_x - org_x;
-    float dis_y = dst_y - org_y;
-    float dis_z = dst_z - org_z; 
-    float dis_yaw = dst_yaw - org_yaw;
-
-    int x_progress = 0; 
-    int y_progress = 0; 
-    int z_progress = 0; 
-    int yaw_progress = 0;
-
-    while (x_progress < 100 || y_progress < 100 || z_progress < 100 || yaw_progress < 100) {
-
-        float x = dst_x - odom_calied.pose.pose.position.x;
-        float y = dst_y - odom_calied.pose.pose.position.y;
-        float z = dst_z - odom_calied.pose.pose.position.z;
-        float yaw = dst_yaw - tf::getYaw(odom_calied.pose.pose.orientation);
-
-        pid_control(1, x, y, z, yaw);
-
-        float det_x = (100 * x) / dis_x;
-        float det_y = (100 * y) / dis_y;
-        float det_z = (100 * z) / dis_z;
-        float det_yaw = (100 * yaw) / dis_yaw;
-
-        x_progress = 100 - (int)det_x;
-        y_progress = 100 - (int)det_y;
-        z_progress = 100 - (int)det_z;
-        yaw_progress = 100 - (int)det_yaw;
-
-        //lazy evaluation
-        if (pid[0].out == 0) x_progress = 100;
-        if (pid[1].out == 0) y_progress = 100;
-        if (pid[2].out == 0) z_progress = 100;
-        if (pid[3].out == 0) yaw_progress = 100;
-
-        jet_nav_feedback.x_progress = x_progress;
-        jet_nav_feedback.y_progress = y_progress;
-        jet_nav_feedback.z_progress = z_progress;
-        jet_nav_feedback.yaw_progress = yaw_progress;
-
-        jet_nav_action_server->publishFeedback(jet_nav_feedback);
-
-        usleep(20000); // 50hz
-    }
-
-    jet_nav_result.result = true;
-    jet_nav_action_server->setSucceeded(jet_nav_result);
-
-    return true;
-}
-
 void Jet::stateMachine()
 {
-}
-
-void Jet::spin()
-{
-    help();
-
-    ros::Rate rate(spin_rate);
-
-    while (ros::ok())
+    static bool success = false;
+    static uint32_t tick = 0;
+    switch (jet_state)
     {
-        ros::spinOnce();
-
-        char c = kbhit();
-
-        if (c >= '1' && c <= '9')
+        case GRAB_BULLETS:
+        if (!success)
         {
-            action(c - '1');
+            success = doGrabBullets();
+            std::cout << "stateMachine: " << "Grab Bullets" << std::endl;
         }
-        if (c >= 'a' && c <= 'a')
+        else if (tick < 10)
         {
-            action(c - 'a' + 9);
+            tick++;
+            std::cout << "stateMachine: " << "Grab Bullets@Tick: " << tick << std::endl;
         }
-        if (c == 'h')
+        else
         {
-            help();
+            tick = 0;
+            success = false;
+            jet_state = REQUEST_CONTROL;
+            std::cout << "stateMachine: " << "Grab Bullets->Request Control" << tick << std::endl;
         }
-        
-        jet_state = status();
-        pub_jet_state();
+        break;
 
-        rate.sleep();
+        case REQUEST_CONTROL:
+        if (!success)
+        {
+            success = doRequestControl();
+            std::cout << "stateMachine: " << "Request Control" << std::endl;
+        }
+        else if (tick < 5)
+        {
+            tick++;
+            std::cout << "stateMachine: " << "Request Control@Tick: " << tick << std::endl;
+        }
+        else
+        {
+            tick = 0;
+            success = false;
+            jet_state = TAKE_OFF;
+            std::cout << "stateMachine: " << "Request Control->Takeoff" << tick << std::endl;
+        }
+        break;
+
+        case TAKE_OFF:
+        if (!success)
+        {
+            success = doTakeoff();
+            std::cout << "stateMachine: " << "Takeoff" << std::endl;
+        }
+        else if (tick < 200)
+        {
+            tick++;
+            std::cout << "stateMachine: " << "Takeoff@Tick: " << tick << std::endl;
+        }
+        else
+        {
+            tick = 0;
+            success = false;
+            jet_state = FLY_TO_CAR;
+            std::cout << "stateMachine: " << "Takeoff->Fly to Car" << tick << std::endl;
+        }
+        break;
+
+        case FLY_TO_CAR:
+        if (!success)
+        {
+            success = doFlyToCar();
+            std::cout << "stateMachine: " << "Fly to Car" << std::endl;
+        }
+        else if (tick < 300)
+        {
+            tick++;
+            std::cout << "stateMachine: " << "Fly to Car@Tick: " << tick << std::endl;
+        }
+        else
+        {
+            tick = 0;
+            success = false;
+            jet_state = SERVE_CAR;
+            std::cout << "stateMachine: " << "Fly to Car->Serve Car" << tick << std::endl;
+        }
+        break;
+
+        case SERVE_CAR:
+        if (!success)
+        {
+            success = doServeCar();
+            std::cout << "stateMachine: " << "Serve Car" << std::endl;
+        }
+        else if (tick < 200)
+        {
+            tick++;
+            std::cout << "stateMachine: " << "Serve Car@Tick: " << tick << std::endl;
+        }
+        else
+        {
+            tick = 0;
+            success = false;
+            jet_state = DROP_BULLETS;
+            std::cout << "stateMachine: " << "Serve Car->Drop Bullets" << tick << std::endl;
+        }
+        break;
+
+        case DROP_BULLETS:
+        if (!success)
+        {
+            success = doDropBullets();
+            std::cout << "stateMachine: " << "Drop Bullets" << std::endl;
+        }
+        else if (tick < 10)
+        {
+            tick++;
+            std::cout << "stateMachine: " << "Drop Bullets@Tick: " << tick << std::endl;
+        }
+        else
+        {
+            tick = 0;
+            success = false;
+            jet_state = BACK_TO_NORMAL_ALTITUDE;
+            std::cout << "stateMachine: " << "Drop Bullets->Back to Normal Altitude" << tick << std::endl;
+        }
+        break;
+        case BACK_TO_NORMAL_ALTITUDE:
+        if (!success)
+        {
+            success = doBackToNormalAltitude();
+            std::cout << "stateMachine: " << "Back to Normal Altitude" << std::endl;
+        }
+        else if (tick < 50)
+        {
+            tick++;
+            std::cout << "stateMachine: " << "Back to Normal Altitude@Tick: " << tick << std::endl;
+        }
+        else
+        {
+            tick = 0;
+            success = false;
+            jet_state = FLY_BACK;
+            std::cout << "stateMachine: " << "Back to Normal Altitude->Fly Back" << tick << std::endl;
+        }
+        break;
+
+        case FLY_BACK:
+        if (!success)
+        {
+            success = doFlyBack();
+            std::cout << "stateMachine: " << "Fly Back" << std::endl;
+        }
+        else if (tick < 200)
+        {
+            tick++;
+            std::cout << "stateMachine: " << "Fly Back@Tick: " << tick << std::endl;
+        }
+        else
+        {
+            tick = 0;
+            success = false;
+            jet_state = VISUAL_SERVO_LANDING;
+            std::cout << "stateMachine: " << "Fly Back->Visual Servo Landing" << tick << std::endl;
+        }
+        break;
+
+        case VISUAL_SERVO_LANDING:
+        if (!success)
+        {
+            success = doVisualServoLanding();
+            std::cout << "stateMachine: " << "Visual Servo Landing" << std::endl;
+        }
+        else if (tick < 200)
+        {
+            tick++;
+            std::cout << "stateMachine: " << "Visual Servo Landing@Tick: " << tick << std::endl;
+        }
+        else
+        {
+            tick = 0;
+            success = false;
+            jet_state = LANDING;
+            std::cout << "stateMachine: " << "Visual Servo Landing->Landing" << tick << std::endl;
+        }
+        break;
+
+        case LANDING:
+        if (!success)
+        {
+            success = doLanding();
+            std::cout << "stateMachine: " << "Landing" << std::endl;
+        }
+        else if (tick < 100)
+        {
+            tick++;
+            std::cout << "stateMachine: " << "Landing@Tick: " << tick << std::endl;
+        }
+        else
+        {
+            tick = 0;
+            success = false;
+            jet_state = STAND_BY;
+            std::cout << "stateMachine: " << "Landing->Standby" << tick << std::endl;
+        }
+        break;
+
+        default:
+        jet_state = STAND_BY;
+        break;
     }
 }
 
@@ -530,8 +715,58 @@ void Jet::help()
 	printf("| [3]  Takeoff                  | [4]  Fly to Car                  |\n");	
 	printf("| [5]  Serve Car                | [6]  Drop bullets                |\n");	
     printf("| [7]  Back to Normal Altitude  | [8]  Fly Back                    |\n");	
-    printf("| [9]  Visual Servo Landing     | [a]  Land                        |\n");	
+    printf("| [9]  Visual Servo Landing     | [a]  Land                        |\n");
+    printf("| [b]  Jetbang Free Style       | [c]  Cutoff Free Style           |\n");	
     printf("+------------------------------------------------------------------+\n");
+}
+
+void Jet::spin()
+{
+    help();
+
+    bool freestyle = false;
+
+    ros::Rate rate(spin_rate);
+
+    while (ros::ok())
+    {
+        ros::spinOnce();
+
+        char c = kbhit();
+
+        if (c == 'b')
+        {
+            freestyle = true;
+        }
+        if (c == 'c')
+        {
+            freestyle = false;
+        }
+
+        if (freestyle)
+        {
+            stateMachine();
+        }
+
+        if (c >= '1' && c <= '9')
+        {
+            action(c - '1' + 1);
+        }
+        if (c >= 'a' && c <= 'a')
+        {
+            action(c - 'a' + 10);
+        }
+        if (c == 'h')
+        {
+            help();
+        }
+
+        
+        jet_state = status();
+        pub_jet_state();
+
+        rate.sleep();
+    }
 }
 
 int main(int argc, char** argv)

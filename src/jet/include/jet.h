@@ -45,7 +45,8 @@ class Jet
 public:
     typedef enum
     {
-        GRAB_BULLETS = 0x00,
+        STAND_BY,
+        GRAB_BULLETS,
         REQUEST_CONTROL,
         TAKE_OFF,
         FLY_TO_CAR,
@@ -76,6 +77,7 @@ protected:
     ros::Publisher jet_state_pub;
     ros::Publisher odom_calied_pub;
 
+    ros::ServiceServer charge_srv;
     ros::ServiceServer cmd_grabber_srv;
     ros::ServiceServer stat_grabber_srv;
     ros::ServiceServer reload_pid_param_srv;
@@ -107,6 +109,7 @@ protected:
     void vision_callback(const geometry_msgs::Vector3Stamped& position);
 
     // service callbacks
+    bool charge_callback(jet::Charge::Request& request, jet::Charge::Response& response);
     bool cmd_grabber_callback(jet::CmdGrabber::Request& request, jet::CmdGrabber::Response& response);
     bool stat_grabber_callback(jet::StatGrabber::Request& request, jet::StatGrabber::Response& response);
     bool reload_pid_param_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);

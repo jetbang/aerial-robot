@@ -52,11 +52,10 @@ include_directories(
 )
 
 add_executable(uav src/uav.cpp
-  src/cfg.cpp 
   src/pid.cpp 
   src/uart.cpp 
   src/crc8.cpp
-  src/timer.cpp
+  src/kbhit.cpp
 )
 
 add_dependencies(uav

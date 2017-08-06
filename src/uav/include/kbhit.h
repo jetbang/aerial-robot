@@ -13,25 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+ 
 #pragma once
 
-#include <stdint.h>
-#include <unistd.h>
-//#include <sys/time.h>
-#include <time.h>
-
-class Timer
-{
-public:
-	Timer(const uint32_t millis = 0);
-	int64_t remain();
-	bool timeout();
-	void reset(const uint32_t millis);
-	
-public:
-	static int get_time (timespec* time);
-
-private:
-	timespec expiry;
-};
+extern char kbhit();

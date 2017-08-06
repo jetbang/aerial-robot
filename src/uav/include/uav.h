@@ -32,6 +32,8 @@
 #include <geometry_msgs/TransformStamped.h> //IMU
 #include <geometry_msgs/Vector3Stamped.h> //velocity
 #include <sensor_msgs/LaserScan.h> //obstacle distance && ultrasonic
+#include <nav_msgs/Odometry.h>
+#include <std_srvs/Empty.h>
 
 #include <deque>
 
@@ -40,11 +42,10 @@
 #include "uav/CmdClaw.h"
 #include "uav/StatClaw.h"
 
-#include "timer.h"
 #include "crc8.h"
 #include "uart.h"
 #include "pid.h"
-#include "cfg.h"
+#include "kbhit.h"
 
 using namespace DJI::onboardSDK;
 
@@ -56,11 +57,13 @@ public:
 
 public:
     bool debug;
+    bool enable_step;
 
     typedef enum Workstate
     {
         STAND_BY,
         GRABBING,
+        REQUESTING_CONTROL,
         TAKING_OFF,
         FLYING_TO_CAR,
         SERVING_CAR,
@@ -69,26 +72,27 @@ public:
         FLYING_BACK,
         SERVING_PARK,
         LANDING,
+        RELEASING_CONTROL,
     }Workstate;
     
 public:
     DJIDrone* drone;
 
-    geometry_msgs::Vector3Stamped g_pos;  // Guidance position (Odometry) feedback
-    geometry_msgs::Vector3Stamped g_vel; // Guidance velocity feedback
-    sensor_msgs::LaserScan g_scan; // Guidance ultrasonic scan feedback
-    geometry_msgs::Vector3Stamped v_pos; // Vision target relative position feedback
+    nav_msgs::Odometry odom;
+    nav_msgs::Odometry odom_bias;
+    nav_msgs::Odometry odom_calied;
 
-    geometry_msgs::Vector3Stamped g_pos_bias;  // Guidance position (Odometry) bias
-    geometry_msgs::Vector3Stamped g_pos_calied;  // Calibrated Guidance position (Odometry)
+    geometry_msgs::Vector3Stamped v_pos; // Vision target relative position feedback
 
 protected:
     ros::NodeHandle nh;
     
+    // publishers
+    ros::Publisher uav_state_pub;
+    ros::Publisher guidance_odom_calied_pub;
+
     // subscribers
-    ros::Subscriber velocity_sub;
-    ros::Subscriber ultrasonic_sub;
-    ros::Subscriber position_sub;
+    ros::Subscriber odom_sub;
     ros::Subscriber vision_sub;    
 
     // actions
@@ -102,6 +106,9 @@ protected:
     ros::ServiceServer charge_service;
     ros::ServiceServer cmd_claw_service;
     ros::ServiceServer stat_claw_service;
+    ros::ServiceServer reload_pid_param_service;
+    ros::ServiceServer reload_dropoint_param_service;
+
 
 protected:
     // other member variables
@@ -122,6 +129,7 @@ protected:
 
     float xy_err_tolerence;
     float z_err_tolerence;
+    float yaw_err_tolerence;
 
     float vision_pos_coeff;
     float takeoff_height;
@@ -132,17 +140,28 @@ protected:
 
     bool calied;
 
-    Timer serial_comm_timer;
-    Timer position_callback_timer;
-    Timer velocity_callback_timer;
-    Timer ultrasonic_callback_timer;
-    Timer vision_callback_timer;
+    static const uint8_t LOST_COUNTER_NUM = 3;
+
+    typedef enum
+    {
+        WDG_IDX_GUIDANCE,
+        WDG_IDX_VISION,
+        WDG_IDX_CLAW,
+    } WdgIdx_e;
+
+    uint32_t lost_counter[LOST_COUNTER_NUM];
+
+public:
+    void load_dropoint_param();
+    void fill_pid_param(int i, const char* axis);
+    void load_pid_param();
+    void calc_odom_calied();
+    void publish_odom_calied();
 
 protected:
+    
     // subscriber callbacks
-    void position_callback(const geometry_msgs::Vector3Stamped& position);
-    void velocity_callback(const geometry_msgs::Vector3Stamped& velocity);
-    void ultrasonic_callback(const sensor_msgs::LaserScan& scan);
+    void guidance_odom_callback(const nav_msgs::OdometryConstPtr& g_odom);
     void vision_callback(const geometry_msgs::Vector3Stamped& position);
 
     // action callbacks
@@ -152,6 +171,8 @@ protected:
     bool charge_callback(uav::Charge::Request& request, uav::Charge::Response& response);
     bool cmd_claw_callback(uav::CmdClaw::Request& request, uav::CmdClaw::Response& response);
     bool stat_claw_callback(uav::StatClaw::Request& request, uav::StatClaw::Response& response);
+    bool reload_pid_param_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);
+    bool reload_dropoint_param_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);
 
 public:
     // low level control api
@@ -182,6 +203,8 @@ public:
 
     // state machine logic
     void stateMachine(); // workstate machine
+    void printState(); //
+    void publish_state();
 
     // ros spin entrence
     void spin();

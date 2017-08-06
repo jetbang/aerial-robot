@@ -52,12 +52,13 @@ using namespace DJI::onboardSDK;
 class UAV
 {
 public:
-    UAV(); // Constructor
+    UAV(ros::NodeHandle n); // Constructor
     ~UAV(); // Destructor
 
 public:
     bool debug;
     bool enable_step;
+    bool enable_claw;
 
     typedef enum Workstate
     {
@@ -76,7 +77,7 @@ public:
     }Workstate;
     
 public:
-    DJIDrone* drone;
+    DJIDrone drone;
 
     nav_msgs::Odometry odom;
     nav_msgs::Odometry odom_bias;
@@ -108,13 +109,14 @@ protected:
     ros::ServiceServer stat_claw_service;
     ros::ServiceServer reload_pid_param_service;
     ros::ServiceServer reload_dropoint_param_service;
+    ros::ServiceServer reload_vision_param_service;
 
 
 protected:
     // other member variables
-    //uint8_t cflag; // control flags
 
     Workstate ws;
+    uint8_t claw_state;
 
     geometry_msgs::Vector3 dropoint;
     PID_t pid[6];
@@ -173,6 +175,7 @@ protected:
     bool stat_claw_callback(uav::StatClaw::Request& request, uav::StatClaw::Response& response);
     bool reload_pid_param_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);
     bool reload_dropoint_param_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);
+    bool reload_vision_param_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);
 
 public:
     // low level control api
@@ -183,7 +186,7 @@ public:
     bool takingoff();
     bool landing();
     bool control(unsigned char flag, float x, float y, float z, float yaw);
-    bool pid_control(float x, float y, float z, float yaw);
+    bool pid_control(uint8_t frame, float x, float y, float z, float yaw);
     bool cmd_claw(char c);
     bool open_claw();
     bool close_claw();
@@ -203,6 +206,7 @@ public:
 
     // state machine logic
     void stateMachine(); // workstate machine
+    void console(uint8_t cmd);
     void printState(); //
     void publish_state();
 

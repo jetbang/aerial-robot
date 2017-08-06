@@ -68,3 +68,11 @@ target_link_libraries(uav
 )
 
 add_dependencies(uav uav_generate_messages_cpp)
+
+add_executable(uav_test src/test.cpp)
+
+target_link_libraries(uav_test
+  ${catkin_LIBRARIES}
+)
+
+add_dependencies(uav_test dji_sdk_generate_messages_cpp)

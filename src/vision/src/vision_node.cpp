@@ -143,7 +143,7 @@ int main(int argc, char** argv) {
             else if (detection_mode == DETECTION_MODE_APRILTAGS)
             {
                 cv::cvtColor(img, img_gray, CV_BGR2GRAY);
-                std::vector<AprilTags::TagDetection> tag_detections = tag_detector.extractTags(img);
+                std::vector<AprilTags::TagDetection> tag_detections = tag_detector.extractTags(img_gray);
                 ROS_DEBUG("%d tag detected", (int)tag_detections.size());
 
                 detected = tag_detections.size() > 0;

@@ -808,9 +808,9 @@ void Jet::spin()
             stateMachine();
         }
 
-        if (c >= '1' && c <= '9')
+        if (c >= '0' && c <= '9')
         {
-            action(c - '1' + 1);
+            action(c - '0');
         }
         if (c >= 'a' && c <= 'a')
         {

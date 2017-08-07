@@ -415,8 +415,8 @@ bool Jet::doFlyToCar()
 
 bool Jet::doServeCar()
 {
-    float ex = vision_target_pos.pose.position.x * vision_pos_coeff;
-    float ey = vision_target_pos.pose.position.y * vision_pos_coeff;
+    float ex = vision_target_pos.pose.position.x; // * vision_pos_coeff;
+    float ey = vision_target_pos.pose.position.y; // * vision_pos_coeff;
     float ez = dropoint.z - odom_calied.pose.pose.position.z;
     float eyaw = 0;
 

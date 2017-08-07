@@ -40,7 +40,7 @@ Jet::Jet(ros::NodeHandle& nh) : drone(nh), uart_fd(-1), calied(false)
     reload_vision_param_srv = nh.advertiseService("/reload_vision_param", &Jet::reload_vision_param_callback, this);
     reload_flight_param_srv = nh.advertiseService("/reload_flight_param", &Jet::reload_flight_param_callback, this);
     reload_dropoint_param_srv = nh.advertiseService("/reload_dropoint_param", &Jet::reload_dropoint_param_callback, this);
-    
+    reload_duration_param_srv = nh.advertiseService("/reload_duration_param", &Jet::reload_duration_param_callback, this);
 
     odometry_sub = nh.subscribe("/guidance/odom", 10, &Jet::odometry_callback, this);
     vision_sub = nh.subscribe("/vision/pos", 10, &Jet::vision_callback, this);
@@ -126,6 +126,11 @@ void Jet::load_flight_param(ros::NodeHandle& nh)
     std::cout << "landing_height: " << landing_height << std::endl;
 }
 
+void Jet::load_duration_param(ros::NodeHandle& nh)
+{
+    nh.getParam("duration", duration);
+}
+
 void Jet::odometry_callback(const nav_msgs::OdometryConstPtr& odometry)
 {
     odom = *odometry;
@@ -166,7 +171,7 @@ void Jet::pub_jet_state()
     jet_state_pub.publish(msg);
 }
 
-void Jet::vision_callback(const geometry_msgs::Vector3Stamped& position)
+void Jet::vision_callback(const geometry_msgs::PoseStamped& position)
 {
     vision_target_pos = position;
 }
@@ -199,6 +204,12 @@ bool Jet::reload_pid_param_callback(std_srvs::Empty::Request& request, std_srvs:
 bool Jet::reload_dropoint_param_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response)
 {
     load_dropoint_param(nh);
+    return true;
+}
+
+bool Jet::reload_duration_param_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response)
+{
+    load_duration_param(nh);
     return true;
 }
 
@@ -372,6 +383,11 @@ uint8_t Jet::status()
     return drone.flight_status;
 }
 
+bool Jet::doStandby()
+{
+    return true;
+}
+
 bool Jet::doGrabBullets()
 {
     return cmd_grabber(1);
@@ -399,8 +415,8 @@ bool Jet::doFlyToCar()
 
 bool Jet::doServeCar()
 {
-    float ex = vision_target_pos.vector.x * vision_pos_coeff;
-    float ey = vision_target_pos.vector.y * vision_pos_coeff;
+    float ex = vision_target_pos.pose.position.x * vision_pos_coeff;
+    float ey = vision_target_pos.pose.position.y * vision_pos_coeff;
     float ez = dropoint.z - odom_calied.pose.pose.position.z;
     float eyaw = 0;
 
@@ -434,8 +450,8 @@ bool Jet::doFlyBack()
 
 bool Jet::doVisualServoLanding()
 {
-    float ex = vision_target_pos.vector.x * vision_pos_coeff;
-    float ey = vision_target_pos.vector.y * vision_pos_coeff;
+    float ex = vision_target_pos.pose.position.x * vision_pos_coeff;
+    float ey = vision_target_pos.pose.position.y * vision_pos_coeff;
     float ez = -landing_height - odom_calied.pose.pose.position.z; // normal altitude
     float eyaw = 0;
 
@@ -447,10 +463,28 @@ bool Jet::doLanding()
     return drone.landing();
 }
 
+bool Jet::doReleaseControl()
+{
+    return drone.release_sdk_permission_control();
+}
+
+bool Jet::cmd_jet_state(uint8_t cmd)
+{
+    if (cmd <= RELEASE_CONTROL)
+    {
+        jet_state = cmd;
+    }
+}
+
 bool Jet::action(uint8_t cmd)
 {
+    cmd_jet_state(cmd);
     switch (cmd)
     {
+        case STAND_BY:
+        std::cout << "\nAction: " << "Standby" << std::endl;
+        return doStandby();
+
         case GRAB_BULLETS:
         std::cout << "\nAction: " << "Grab Bullets" << std::endl;
         return doGrabBullets();
@@ -491,6 +525,10 @@ bool Jet::action(uint8_t cmd)
         std::cout << "\nAction: " << "Landing" << std::endl;
         return doLanding();
 
+        case RELEASE_CONTROL:
+        std::cout << "\nAction: " << "Release Control" << std::endl;
+        return doReleaseControl();
+
         default:
         return false;
     }
@@ -508,7 +546,7 @@ void Jet::stateMachine()
             success = doGrabBullets();
             std::cout << "stateMachine: " << "Grab Bullets" << std::endl;
         }
-        else if (tick < 10)
+        else if (tick < duration[GRAB_BULLETS])
         {
             tick++;
             std::cout << "stateMachine: " << "Grab Bullets@Tick: " << tick << std::endl;
@@ -528,7 +566,7 @@ void Jet::stateMachine()
             success = doRequestControl();
             std::cout << "stateMachine: " << "Request Control" << std::endl;
         }
-        else if (tick < 5)
+        else if (tick < duration[REQUEST_CONTROL])
         {
             tick++;
             std::cout << "stateMachine: " << "Request Control@Tick: " << tick << std::endl;
@@ -548,7 +586,7 @@ void Jet::stateMachine()
             success = doTakeoff();
             std::cout << "stateMachine: " << "Takeoff" << std::endl;
         }
-        else if (tick < 200)
+        else if (tick < duration[TAKE_OFF])
         {
             tick++;
             std::cout << "stateMachine: " << "Takeoff@Tick: " << tick << std::endl;
@@ -568,7 +606,7 @@ void Jet::stateMachine()
             success = doFlyToCar();
             std::cout << "stateMachine: " << "Fly to Car" << std::endl;
         }
-        else if (tick < 300)
+        else if (tick < duration[FLY_TO_CAR])
         {
             tick++;
             std::cout << "stateMachine: " << "Fly to Car@Tick: " << tick << std::endl;
@@ -588,7 +626,7 @@ void Jet::stateMachine()
             success = doServeCar();
             std::cout << "stateMachine: " << "Serve Car" << std::endl;
         }
-        else if (tick < 200)
+        else if (tick < duration[SERVE_CAR])
         {
             tick++;
             std::cout << "stateMachine: " << "Serve Car@Tick: " << tick << std::endl;
@@ -608,7 +646,7 @@ void Jet::stateMachine()
             success = doDropBullets();
             std::cout << "stateMachine: " << "Drop Bullets" << std::endl;
         }
-        else if (tick < 10)
+        else if (tick < duration[DROP_BULLETS])
         {
             tick++;
             std::cout << "stateMachine: " << "Drop Bullets@Tick: " << tick << std::endl;
@@ -621,13 +659,14 @@ void Jet::stateMachine()
             std::cout << "stateMachine: " << "Drop Bullets->Back to Normal Altitude" << tick << std::endl;
         }
         break;
+
         case BACK_TO_NORMAL_ALTITUDE:
         if (!success)
         {
             success = doBackToNormalAltitude();
             std::cout << "stateMachine: " << "Back to Normal Altitude" << std::endl;
         }
-        else if (tick < 50)
+        else if (tick < duration[BACK_TO_NORMAL_ALTITUDE])
         {
             tick++;
             std::cout << "stateMachine: " << "Back to Normal Altitude@Tick: " << tick << std::endl;
@@ -647,7 +686,7 @@ void Jet::stateMachine()
             success = doFlyBack();
             std::cout << "stateMachine: " << "Fly Back" << std::endl;
         }
-        else if (tick < 200)
+        else if (tick < duration[FLY_BACK])
         {
             tick++;
             std::cout << "stateMachine: " << "Fly Back@Tick: " << tick << std::endl;
@@ -667,7 +706,7 @@ void Jet::stateMachine()
             success = doVisualServoLanding();
             std::cout << "stateMachine: " << "Visual Servo Landing" << std::endl;
         }
-        else if (tick < 200)
+        else if (tick < duration[VISUAL_SERVO_LANDING])
         {
             tick++;
             std::cout << "stateMachine: " << "Visual Servo Landing@Tick: " << tick << std::endl;
@@ -687,7 +726,7 @@ void Jet::stateMachine()
             success = doLanding();
             std::cout << "stateMachine: " << "Landing" << std::endl;
         }
-        else if (tick < 100)
+        else if (tick < duration[LANDING])
         {
             tick++;
             std::cout << "stateMachine: " << "Landing@Tick: " << tick << std::endl;
@@ -696,8 +735,28 @@ void Jet::stateMachine()
         {
             tick = 0;
             success = false;
-            jet_state = STAND_BY;
+            jet_state = RELEASE_CONTROL;
             std::cout << "stateMachine: " << "Landing->Standby" << tick << std::endl;
+        }
+        break;
+
+        case RELEASE_CONTROL:
+        if (!success)
+        {
+            success = doReleaseControl();
+            std::cout << "stateMachine: " << "Release Control" << std::endl;
+        }
+        else if (tick < duration[RELEASE_CONTROL])
+        {
+            tick++;
+            std::cout << "stateMachine: " << "Release Control@Tick: " << tick << std::endl;
+        }
+        else
+        {
+            tick = 0;
+            success = false;
+            jet_state = STAND_BY;
+            std::cout << "stateMachine: " << "Release Control->Standby" << tick << std::endl;
         }
         break;
 
@@ -711,12 +770,13 @@ void Jet::help()
 {
     printf("\r\n");
     printf("+-------------------------- < Main menu > -------------------------+\n");
-	printf("| [1]  Grab Bullets             | [2]  Request Control             |\n");
-	printf("| [3]  Takeoff                  | [4]  Fly to Car                  |\n");	
-	printf("| [5]  Serve Car                | [6]  Drop bullets                |\n");	
-    printf("| [7]  Back to Normal Altitude  | [8]  Fly Back                    |\n");	
-    printf("| [9]  Visual Servo Landing     | [a]  Land                        |\n");
-    printf("| [b]  Jetbang Free Style       | [c]  Cutoff Free Style           |\n");	
+    printf("| [0]  Stand-by                 | [1]  Grab Bullets                |\n");
+	printf("| [2]  Request Control          | [3]  Takeoff                     |\n");
+	printf("| [4]  Fly to Car               | [5]  Serve Car                   |\n");	
+	printf("| [6]  Drop bullets             | [7]  Back to Normal Altitude     |\n");	
+    printf("| [8]  Fly Back                 | [9]  Visual Servo Landing        |\n");	
+    printf("| [a]  Landing                  | [b]  Jetbang Free Style          |\n");
+    printf("| [c]  Pause Free Style         | [d]  Resume Free Style           |\n");	
     printf("+------------------------------------------------------------------+\n");
 }
 
@@ -734,7 +794,7 @@ void Jet::spin()
 
         char c = kbhit();
 
-        if (c == 'b')
+        if (c == 'b' || c == 'd')
         {
             freestyle = true;
         }
@@ -761,8 +821,6 @@ void Jet::spin()
             help();
         }
 
-        
-        jet_state = status();
         pub_jet_state();
 
         rate.sleep();

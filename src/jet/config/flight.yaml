@@ -1,2 +1,2 @@
-takeoff_height: 1.2
-landing_height: 0.3
+takeoff_height: -1.2
+landing_height: -0.3

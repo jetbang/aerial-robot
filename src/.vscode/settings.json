@@ -47,6 +47,7 @@
         "algorithm": "cpp",
         "vector": "cpp",
         "string": "cpp",
-        "*.ipp": "cpp"
+        "*.ipp": "cpp",
+        "core": "cpp"
     }
 }

@@ -75,23 +75,22 @@ bool CircleDetector::findParkCircle() {
             largest_contour_index = i;
             }
         }
-        cv::Point2f center;
-        float radius;
-        cv::minEnclosingCircle(contours[largest_contour_index], center, radius);
-        float circle_area = 3.14*radius*radius;
+        cv::minEnclosingCircle(contours[largest_contour_index], m_center, m_radius);
+        float circle_area = 3.14*m_radius*m_radius;
         float contour_area = cv::contourArea(contours[largest_contour_index]);			
         if (contour_area / circle_area > 0.9) {
             m_parkdetected = true;
             // std::cout << contour_area / circle_area << std::endl;
-            m_center[0] = center.x;
-            m_center[1] = center.y;
-            std::cout << center.x << ' ' << center.y << std::endl;
-            m_radius = radius;
-            if(m_parkcolor==1) cv::circle(m_originalimg, center, radius, cv::Scalar(0, 0, 255));
-            else if(m_parkcolor==2) cv::circle(m_originalimg, center, radius, cv::Scalar(255, 0, 0));
+            std::cout << m_center.x << ' ' << m_center.y << std::endl;
         }
     }	
     return true;
+}
+
+void CircleDetector::draw(cv::Mat& img)
+{
+    if(m_parkcolor==1) cv::circle(img, m_center, m_radius, cv::Scalar(0, 0, 255));
+    else if(m_parkcolor==2) cv::circle(img, m_center, m_radius, cv::Scalar(255, 0, 0));
 }
 
 bool CircleDetector::show_result() {

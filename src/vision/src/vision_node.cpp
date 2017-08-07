@@ -45,11 +45,11 @@ int main(int argc, char** argv) {
 
     ros::init(argc, argv, "vision");
 
-    ros::NodeHandle nh;
+    ros::NodeHandle np("~");
 
     int vid = 0;
     
-    nh.param<int>("vid", vid, 0);
+    np.param<int>("vid", vid, 0);
     cv::VideoCapture cap(vid);
 
     if (!cap.isOpened())
@@ -59,16 +59,16 @@ int main(int argc, char** argv) {
     }
 
     bool show_image;
-    nh.param<bool>("show_image", show_image, false);
+    np.param<bool>("show_image", show_image, true);
 
     std::string tag_code;
     double fx, fy, px, py, tag_size;
-    nh.param<double>("fx", fx, 600);
-    nh.param<double>("fy", fy, 600);
-    nh.param<double>("px", px, 320);
-    nh.param<double>("py", py, 240);
-    nh.param<std::string>("tag_code", tag_code, "16h5");
-    nh.param<double>("tag_size", tag_size, 0.163513);
+    np.param<double>("fx", fx, 600);
+    np.param<double>("fy", fy, 600);
+    np.param<double>("px", px, 320);
+    np.param<double>("py", py, 240);
+    np.param<std::string>("tag_code", tag_code, "16h5");
+    np.param<double>("tag_size", tag_size, 0.163513);
 
     AprilTags::TagCodes m_tagCodes(AprilTags::tagCodes16h5);
     if (tag_code == "16h5") {
@@ -89,6 +89,7 @@ int main(int argc, char** argv) {
     CircleDetector circle_detector(RED_CIRCLE);  //1: blue, 2: red=
     AprilTags::TagDetector tag_detector(m_tagCodes);
 
+    ros::NodeHandle nh;
     ros::Subscriber jet_state_sub = nh.subscribe<std_msgs::UInt8>("/jet_state", 10, jet_state_callback);
     ros::Publisher target_pos_pub = nh.advertise<geometry_msgs::PoseStamped>("/vision/target_pos", 10);
     ros::Publisher detection_mode_pub = nh.advertise<std_msgs::UInt8>("/vision/detection_mode", 10);
@@ -99,6 +100,7 @@ int main(int argc, char** argv) {
     std_msgs::UInt8 detection_mode_msg;
 
     bool detected = false;
+    bool window_created = false;
 
     ros::Rate rate(30);
 
@@ -122,8 +124,10 @@ int main(int argc, char** argv) {
 
                 if (detected)
                 {
-                    target_pos.pose.position.x = circle_detector.m_center[0];
-                    target_pos.pose.position.x = circle_detector.m_center[0];
+                    if (show_image)
+                        circle_detector.draw(img);
+                    target_pos.pose.position.x = circle_detector.m_center.x;
+                    target_pos.pose.position.x = circle_detector.m_center.y;
                     target_pos.pose.position.z = circle_detector.m_radius;
                 }
                 else
@@ -150,7 +154,8 @@ int main(int argc, char** argv) {
                 if (detected)
                 {
                     AprilTags::TagDetection detection = tag_detections[0];
-                    // detection.draw(img_gray);
+                    if (show_image)
+                        detection.draw(img);
                     Eigen::Matrix4d transform = detection.getRelativeTransform(tag_size, fx, fy, px, py);
                     Eigen::Matrix3d rot = transform.block(0, 0, 3, 3);
                     Eigen::Quaternion<double> rot_quaternion = Eigen::Quaternion<double>(rot);
@@ -177,13 +182,18 @@ int main(int argc, char** argv) {
 
             if (show_image)
             {
-                //cv::imshow("vision", img);
-                //cv::waitKey(1);
+                cv::imshow("vision", img);
+                window_created = true;
+                cv::waitKey(1);
             }
         }
         else
         {
-            //cv::destroyWindow("vision");
+            if (window_created)
+            {
+                cv::destroyWindow("vision");
+                window_created = false;
+            }
             cap.release(); 
         }
         

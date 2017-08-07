@@ -17,7 +17,7 @@ bool CircleDetector::detect(cv::Mat &image) {
     imgThreshold();
     imgDilate();
     findParkCircle();
-    debug_vision();
+    //show_result();
     if(m_parkdetected) return true;
     else return false;
 }
@@ -94,8 +94,8 @@ bool CircleDetector::findParkCircle() {
     return true;
 }
 
-bool CircleDetector::debug_vision() {
-    cv::imshow("originalimg", m_originalimg);
+bool CircleDetector::show_result() {
+    cv::imshow("circle", m_originalimg);
     
 //    cv::imshow("thresholdimg",m_thresholdimg);
 //    cv::imshow("dilateimg",m_dilateimg);

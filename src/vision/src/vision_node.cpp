@@ -25,13 +25,13 @@ enum
 
 uint8_t detection_mode = DETECTION_MODE_NONE;
 
-void jet_state_callback(std_msgs::UInt8& jet_state_msg)
+void jet_state_callback(const std_msgs::UInt8ConstPtr& jet_state_msg)
 {
-    if (jet_state_msg.data == 9)
+    if (jet_state_msg->data == 9)
     {
         detection_mode = DETECTION_MODE_CIRCLE;
     }
-    else if (jet_state_msg.data == 9)
+    else if (jet_state_msg->data == 5)
     {
         detection_mode = DETECTION_MODE_APRILTAGS;
     }
@@ -43,9 +43,23 @@ void jet_state_callback(std_msgs::UInt8& jet_state_msg)
 
 int main(int argc, char** argv) {
 
-    ros::init(argc, argv, "uav_vision_node");
+    ros::init(argc, argv, "vision");
 
     ros::NodeHandle nh;
+
+    int vid = 0;
+    
+    nh.param<int>("vid", vid, 0);
+    cv::VideoCapture cap(vid);
+
+    if (!cap.isOpened())
+    {
+        std::cout << "ERROR: Can not open video device " << vid << std::endl;
+        return -1;
+    }
+
+    bool show_image;
+    nh.param<bool>("show_image", show_image, false);
 
     std::string tag_code;
     double fx, fy, px, py, tag_size;
@@ -75,12 +89,10 @@ int main(int argc, char** argv) {
     CircleDetector circle_detector(RED_CIRCLE);  //1: blue, 2: red=
     AprilTags::TagDetector tag_detector(m_tagCodes);
 
+    ros::Subscriber jet_state_sub = nh.subscribe<std_msgs::UInt8>("/jet_state", 10, jet_state_callback);
     ros::Publisher target_pos_pub = nh.advertise<geometry_msgs::PoseStamped>("/vision/target_pos", 10);
     ros::Publisher detection_mode_pub = nh.advertise<std_msgs::UInt8>("/vision/detection_mode", 10);
 
-    
-
-    cv::VideoCapture cap(0);
     cv::Mat img, img_gray;
 
     geometry_msgs::PoseStamped target_pos;
@@ -94,6 +106,10 @@ int main(int argc, char** argv) {
         ros::spinOnce();
         if (detection_mode != DETECTION_MODE_NONE)
         {
+            if (!cap.isOpened())
+            {
+                cap.open(vid);
+            }
             cap >> img;
             if (detection_mode == DETECTION_MODE_CIRCLE)
             {
@@ -158,8 +174,18 @@ int main(int argc, char** argv) {
                 target_pos_pub.publish(target_pos);
                 
             }
-        }
 
+            if (show_image)
+            {
+                //cv::imshow("vision", img);
+                //cv::waitKey(1);
+            }
+        }
+        else
+        {
+            //cv::destroyWindow("vision");
+            cap.release(); 
+        }
         
         detection_mode_msg.data = detection_mode;
         detection_mode_pub.publish(detection_mode_msg);

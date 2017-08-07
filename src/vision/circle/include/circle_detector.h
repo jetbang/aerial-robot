@@ -19,5 +19,5 @@ private:
     bool imgThreshold();
     bool imgDilate();
     bool findParkCircle();
-    bool debug_vision();
+    bool show_result();
 };

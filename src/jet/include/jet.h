@@ -144,13 +144,13 @@ protected:
     float vision_pos_coeff;
     float takeoff_height;
     float landing_height;
+    float normal_altitude;
 
     bool odom_update_flag;
     bool vision_target_pos_update_flag;
 
-    float normal_altitude;
-
     bool use_guidance;
+    bool freestyle;
 
 protected:
     bool cmd_grabber(uint8_t c);

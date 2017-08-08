@@ -17,7 +17,7 @@
 #include "jet.h"
 
 Jet::Jet(ros::NodeHandle& nh) : drone(nh), uart_fd(-1), calied(false), odom_update_flag(false),
-vision_target_pos_update_flag(false)
+vision_target_pos_update_flag(false), use_guidance(false), freestyle(false)
 {
     this->nh = nh;
 
@@ -923,16 +923,15 @@ void Jet::help()
 	printf("| [6]  Serve Car                | [7]  Drop bullets                |\n");	
 	printf("| [8]  Back to Normal Altitude  | [9]  Fly Back                    |\n");	
     printf("| [a]  Visual Servo Landing     | [b]  Landing                     |\n");	
-    printf("| [c]  Jetbang Free Style       | [d]  Pause Free Style            |\n");
-    printf("| [e]  Resume Free Style        | [f]  Cutoff Free Style           |\n");	
+    printf("| [c]  Release Control          | [d]  Jetbang Free Style          |\n");	
+    printf("| [e]  Pause Free Style         | [f]  Resume Free Style           |\n");
+    printf("| [g]  Cutoff Free Style        | [h]  Help                        |\n");	
     printf("+------------------------------------------------------------------+\n");
 }
 
 void Jet::spin()
 {
     help();
-
-    bool freestyle = false;
 
     ros::Rate rate(spin_rate);
 
@@ -950,6 +949,11 @@ void Jet::spin()
         {
             freestyle = false;
         }
+        if (c == 'c')
+        {
+            if (jet_state = STAND_BY)
+                jet_state = GRAB_BULLETS;
+        }
         if (c == 'f')
         {
             jet_state = STAND_BY;
@@ -964,7 +968,7 @@ void Jet::spin()
         {
             action(c - '0');
         }
-        if (c >= 'a' && c <= 'f')
+        if (c >= 'a' && c <= 'c')
         {
             action(c - 'a' + 10);
         }

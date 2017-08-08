@@ -890,7 +890,7 @@ void Jet::stateMachine()
             if (freestyle)
             {
                 freestyle = false; // clear freestyle flag
-                std::cout << "+-------------Jetbang freestyle done--------------+" << std::endl;
+                std::cout << "+---------------------Jetbang Free Style Done----------------------+" << std::endl;
                 help();
             }
         }

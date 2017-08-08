@@ -25,20 +25,38 @@ enum
 
 uint8_t detection_mode = DETECTION_MODE_NONE;
 
+bool detect_tag_only = false;
+int jet_state_detect_apriltag = 6;
+int jet_state_detect_circle = 10;
 void jet_state_callback(const std_msgs::UInt8ConstPtr& jet_state_msg)
 {
-    if (jet_state_msg->data == 10)
+    if (detect_tag_only)
     {
-        detection_mode = DETECTION_MODE_CIRCLE;
-    }
-    else if (jet_state_msg->data == 6)
-    {
-        detection_mode = DETECTION_MODE_APRILTAGS;
+        if (jet_state_msg->data == jet_state_detect_circle || jet_state_msg->data == jet_state_detect_apriltag)
+        {
+            detection_mode = DETECTION_MODE_APRILTAGS;
+        }
+        else
+        {
+            detection_mode = DETECTION_MODE_NONE;
+        }
     }
     else
     {
-        detection_mode = DETECTION_MODE_NONE;
+        if (jet_state_msg->data == jet_state_detect_circle)
+        {
+            detection_mode = DETECTION_MODE_CIRCLE;
+        }
+        else if (jet_state_msg->data == jet_state_detect_apriltag)
+        {
+            detection_mode = DETECTION_MODE_APRILTAGS;
+        }
+        else
+        {
+            detection_mode = DETECTION_MODE_NONE;
+        }
     }
+    
 }
 
 int main(int argc, char** argv) {
@@ -60,6 +78,9 @@ int main(int argc, char** argv) {
 
     bool show_image;
     np.param<bool>("show_image", show_image, true);
+    np.param<bool>("detect_tag_only", detect_tag_only, true);
+    np.param<int>("jet_state_detect_apriltag", jet_state_detect_apriltag, 6);
+    np.param<int>("jet_state_detect_circle", jet_state_detect_circle, 10);
 
     std::string tag_code;
     double fx, fy, px, py, tag_size;

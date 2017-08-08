@@ -307,6 +307,18 @@ bool Jet::goal_reached()
 
 bool Jet::pid_control(uint8_t ground, float x, float y, float z, float yaw)
 {
+    if (ground && odom_update_flag == false)
+    {
+        control(ground, 0, 0, 0, 0); // Just to ensure control rate
+        return false;
+    }
+
+    if ((!ground) && vision_target_pos_update_flag == false)
+    {
+        control(ground, 0, 0, 0, 0); // Just to ensure control rate
+        return false;
+    }
+
     float fx = 0;
     float fy = 0;
     float fz = 0;
@@ -323,6 +335,15 @@ bool Jet::pid_control(uint8_t ground, float x, float y, float z, float yaw)
         fy = odom_calied.pose.pose.position.y;
         fz = odom_calied.pose.pose.position.z;
         fyaw = tf::getYaw(odom_calied.pose.pose.orientation);
+        odom_update_flag = false; // clear odom update flag
+    }
+    else
+    {
+        fx = 0;
+        fy = 0;
+        fz = 0;
+        fyaw = 0;
+        vision_target_pos_update_flag = false;
     }
     
     rx = fx + x;
@@ -349,12 +370,12 @@ bool Jet::pid_control(uint8_t ground, float x, float y, float z, float yaw)
 
     control(ground, ox, oy, oz, oyaw);
 
-    std::cout << "------loop control: " << std::endl;
+    std::cout << "+------------------------- control loop -------------------------+" << std::endl;
     std::cout << "rx: " << rx << ", ry: " << ry << ", rz: " << rz << ", ryaw: " << ryaw << std::endl;
     std::cout << "fx: " << fx << ", fy: " << fy << ", fz: " << fz << ", fyaw: " << fyaw << std::endl;
     std::cout << "ex: " << x << ", ey: " << y << ", ez: " << z << ", eyaw: " << yaw << std::endl;
     std::cout << "ox: " << ox << ", oy: " << oy << ", oz: " << oz << ", oyaw: " << oyaw << std::endl;
-
+    std::cout << "+----------------------------------------------------------------+" << std::endl;
     return goal_reached();
 }
 
@@ -460,72 +481,30 @@ bool Jet::doToNormalAltitude()
 {
     float ex = 0;
     float ey = 0;
-    float ez = 0;
+    float ez = normal_altitude - odom_calied.pose.pose.position.z; // adjust altitude
     float eyaw = 0;
 
-    if (odom_update_flag == true)
-    {
-        ex = 0; // keep x
-        ey = 0; // keep y
-        ez = normal_altitude - odom_calied.pose.pose.position.z; // adjust altitude
-        eyaw = 0; // keep yaw
-
-        odom_update_flag = false;
-
-        return pid_control(1, ex, ey, ez, eyaw);
-    }
-
-    pid_control(1, ex, ey, ez, eyaw); // to ensure control rate
-
-    return false;
+    return pid_control(1, ex, ey, ez, eyaw);
 }
 
 bool Jet::doFlyToCar()
 {
-    float ex = 0;
-    float ey = 0;
+    float ex = dropoint.x - odom_calied.pose.pose.position.x;
+    float ey = dropoint.y - odom_calied.pose.pose.position.y;
     float ez = 0;
     float eyaw = 0;
 
-    if (odom_update_flag == true)
-    {
-        ex = dropoint.x - odom_calied.pose.pose.position.x;
-        ey = dropoint.y - odom_calied.pose.pose.position.y;
-        ez = 0; // keep altitude
-        eyaw = 0;
-
-        odom_update_flag = false;
-
-        return pid_control(1, ex, ey, ez, eyaw);
-    }
-
-    pid_control(1, ex, ey, ez, eyaw); // to ensure control rate
-
-    return false;
+    return pid_control(1, ex, ey, ez, eyaw);
 }
 
 bool Jet::doServeCar()
 {
-    float ex = 0;
-    float ey = 0;
-    float ez = 0;
+    float ex = vision_target_pos.pose.position.x;
+    float ey = vision_target_pos.pose.position.y;
+    float ez = dropoint.z - vision_target_pos.pose.position.z;
     float eyaw = 0;
 
-    if (vision_target_pos_update_flag == true) // && odom_update_flag)
-    {
-        ex = vision_target_pos.pose.position.x; // * vision_pos_coeff;
-        ey = vision_target_pos.pose.position.y; // * vision_pos_coeff;
-        ez = dropoint.z - vision_target_pos.pose.position.z;
-        eyaw = 0;
-
-        vision_target_pos_update_flag = false;
-
-        return pid_control(0, ex, ey, ez, eyaw); // Body frame
-    }
-
-    pid_control(0, ex, ey, ez, eyaw); // to ensure control rate
-
-    return false;
+    return pid_control(0, ex, ey, ez, eyaw);
 }
 
 bool Jet::doDropBullets()
@@ -537,72 +516,30 @@ bool Jet::doBackToNormalAltitude()
 {
     float ex = 0;
     float ey = 0;
-    float ez = 0;
+    float ez = normal_altitude - odom_calied.pose.pose.position.z; // normal altitude
     float eyaw = 0;
 
-    if (odom_update_flag == true)
-    {
-        ex = 0;
-        ey = 0;
-        ez = normal_altitude - odom_calied.pose.pose.position.z; // normal altitude
-        eyaw = 0;
-
-        odom_update_flag = false;
-
-        return pid_control(1, ex, ey, ez, eyaw);
-    }
-
-    pid_control(1, ex, ey, ez, eyaw); // to ensure control rate
-
-    return false;
+    return pid_control(1, ex, ey, ez, eyaw);
 }
 
 bool Jet::doFlyBack()
 {
-    float ex = 0;
-    float ey = 0;
+    float ex = 0 - odom_calied.pose.pose.position.x;
+    float ey = 0 - odom_calied.pose.pose.position.y;
     float ez = 0;
     float eyaw = 0;
 
-    if (odom_update_flag == true)
-    {
-        ex = 0 - odom_calied.pose.pose.position.x;
-        ey = 0 - odom_calied.pose.pose.position.y;
-        ez = 0;
-        eyaw = 0;
-
-        odom_update_flag = false;
-
-        return pid_control(1, ex, ey, ez, eyaw);
-    }
-
-    pid_control(1, ex, ey, ez, eyaw); // to ensure control rate
-    
-    return false;
+    return pid_control(1, ex, ey, ez, eyaw);
 }
 
 bool Jet::doVisualServoLanding()
 {
-    float ex = 0;
-    float ey = 0;
-    float ez = 0;
+    float ex = vision_target_pos.pose.position.x;
+    float ey = vision_target_pos.pose.position.y;
+    float ez = landing_height - vision_target_pos.pose.position.z;
     float eyaw = 0;
 
-    if (vision_target_pos_update_flag == true) // && odom_update_flag)
-    {
-        ex = vision_target_pos.pose.position.x; // * vision_pos_coeff;
-        ey = vision_target_pos.pose.position.y; // * vision_pos_coeff;
-        ez = landing_height - vision_target_pos.pose.position.z;
-        eyaw = 0;
-
-        vision_target_pos_update_flag = false;
-
-        return pid_control(0, ex, ey, ez, eyaw); // Body frame
-    }
-
-    pid_control(0, ex, ey, ez, eyaw); // to ensure control rate
-    
-    return false;
+    return pid_control(0, ex, ey, ez, eyaw);
 }
 
 bool Jet::doLanding()
@@ -928,6 +865,8 @@ void Jet::stateMachine()
             success = false;
             jet_state = RELEASE_CONTROL;
             std::cout << "stateMachine: " << "Landing->Standby" << tick << std::endl;
+
+            calied = false; // re-calibrate odom
         }
         break;
 
@@ -948,6 +887,12 @@ void Jet::stateMachine()
             success = false;
             jet_state = STAND_BY;
             std::cout << "stateMachine: " << "Release Control->Standby" << tick << std::endl;
+            if (freestyle)
+            {
+                freestyle = false; // clear freestyle flag
+                std::cout << "+-------------Jetbang freestyle done--------------+" << std::endl;
+                help();
+            }
         }
         break;
 
@@ -1010,7 +955,7 @@ void Jet::spin()
 
         if (freestyle)
         {
-            std::cout << " Jetbang Free Styling" << std::endl;
+            std::cout << "Jetbang Free Styling" << std::endl;
             stateMachine();
         }
 

@@ -2,6 +2,7 @@
 # grab_bullets: 100
 # request_control: 10
 # takeoff: 250
+# to normal height: 100
 # fly_to_car: 250
 # serve_car: 100
 # drop_bullets: 100
@@ -11,4 +12,4 @@
 # landing: 200
 # release_control: 10
 
-duration: [10, 200, 10, 350, 400, 450, 200, 300, 400, 400, 300, 200, 10]
+duration: [10, 50, 5, 350, 10, 10, 10, 10, 10, 10, 10, 220, 10]

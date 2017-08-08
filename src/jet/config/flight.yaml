@@ -1,2 +1,3 @@
-takeoff_height: -1.2
-landing_height: -0.3
+takeoff_height: 1.2
+landing_height: 0.3
+normal_altitude: 1.2 # relative to takeoff point

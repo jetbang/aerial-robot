@@ -61,10 +61,16 @@ add_executable(jet src/jet.cpp
 add_dependencies(jet
   jet_generate_messages_cpp)
 
-## Specify libraries to link a library or executable target against
 target_link_libraries(jet
   ${OpenCV_LIBS}
   ${catkin_LIBRARIES}
 )
 
-add_dependencies(jet jet_generate_messages_cpp)
+add_executable(sdk_odom_to_guidance_odom 
+  src/sdk_odom_to_guidance_odom.cpp 
+)
+
+target_link_libraries(sdk_odom_to_guidance_odom
+  ${catkin_LIBRARIES}
+)
+

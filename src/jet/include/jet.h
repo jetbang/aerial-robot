@@ -51,6 +51,7 @@ public:
         GRAB_BULLETS,
         REQUEST_CONTROL,
         TAKE_OFF,
+        TO_NORMAL_ALTITUDE,
         FLY_TO_CAR,
         SERVE_CAR,
         DROP_BULLETS,
@@ -147,6 +148,10 @@ protected:
     bool odom_update_flag;
     bool vision_target_pos_update_flag;
 
+    float normal_altitude;
+
+    bool use_guidance;
+
 protected:
     bool cmd_grabber(uint8_t c);
     uint8_t stat_grabber();
@@ -160,6 +165,7 @@ public:
     bool doGrabBullets();
     bool doRequestControl();
     bool doTakeoff();
+    bool doToNormalAltitude();
     bool doFlyToCar();
     bool doServeCar();
     bool doDropBullets();

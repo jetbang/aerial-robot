@@ -26,6 +26,7 @@ vision_target_pos_update_flag(false)
     np.param<int>("spin_rate", spin_rate, 50);
     np.param<std::string>("serial_port", serial_port, "/dev/ttyTHS2"); 
     np.param<int>("serial_baudrate", serial_baudrate, 115200);
+    np.param<bool>("use_guidance", use_guidance, false);
 
     int ret = uart_open(&uart_fd, serial_port.c_str(), serial_baudrate, UART_OFLAG_WR);
     if (ret < 0) {
@@ -43,7 +44,7 @@ vision_target_pos_update_flag(false)
     reload_dropoint_param_srv = nh.advertiseService("/reload_dropoint_param", &Jet::reload_dropoint_param_callback, this);
     reload_duration_param_srv = nh.advertiseService("/reload_duration_param", &Jet::reload_duration_param_callback, this);
 
-    odometry_sub = nh.subscribe("/guidance/odom", 10, &Jet::odometry_callback, this);
+    odometry_sub = nh.subscribe("/odom_raw", 10, &Jet::odometry_callback, this);
     vision_sub = nh.subscribe("/vision/target_pos", 10, &Jet::vision_callback, this);
 
     jet_state_pub = nh.advertise<std_msgs::UInt8>("/jet_state", 10);
@@ -124,8 +125,10 @@ void Jet::load_flight_param(ros::NodeHandle& nh)
 {
     nh.param<float>("takeoff_height", takeoff_height, 1.2f);
     nh.param<float>("landing_height", landing_height, 0.3f);
+    nh.param<float>("normal_altitude", normal_altitude, 1.2);
     std::cout << "takeoff_height: " << takeoff_height << std::endl;
     std::cout << "landing_height: " << landing_height << std::endl;
+    std::cout << "normal_altitude: " << normal_altitude << std::endl;
 }
 
 void Jet::load_duration_param(ros::NodeHandle& nh)
@@ -142,6 +145,10 @@ void Jet::load_duration_param(ros::NodeHandle& nh)
 void Jet::odometry_callback(const nav_msgs::OdometryConstPtr& odometry)
 {
     odom = *odometry;
+    if (use_guidance) // revert z if use guidance
+    {
+        odom.pose.pose.position.z = -odom.pose.pose.position.z;
+    }
     if (calied == false)
     {
         odom_bias = odom;
@@ -189,7 +196,10 @@ void Jet::vision_callback(const geometry_msgs::PoseStamped& position)
 bool Jet::charge_callback(jet::Charge::Request& request, jet::Charge::Response& response)
 {
     response.result = status();
-    jet_state = GRAB_BULLETS;
+    if (jet_state == STAND_BY) // Accept request ONLY when jet is standing by 
+    {
+        jet_state = GRAB_BULLETS;
+    }
     return true;
 }
 
@@ -237,6 +247,10 @@ bool Jet::reload_flight_param_callback(std_srvs::Empty::Request& request, std_sr
 
 bool Jet::cmd_grabber(uint8_t c)
 {
+    if (uart_fd == -1)
+    {
+        return false;
+    }
     uint8_t buf[4];
     buf[0] = 0xa5;
     buf[1] = c;
@@ -248,6 +262,11 @@ bool Jet::cmd_grabber(uint8_t c)
 
 uint8_t Jet::stat_grabber()
 {
+    if (uart_fd == -1)
+    {
+        return 0xff;
+    }
+
     uint8_t buf[4];
     memset(buf, 0, 4);
     read(uart_fd, buf, 4);
@@ -338,7 +357,6 @@ bool Jet::pid_control(uint8_t ground, float x, float y, float z, float yaw)
 
     return goal_reached();
 }
-
 
 bool Jet::jet_nav_action_callback(const jet::JetNavGoalConstPtr& goal)
 {
@@ -438,6 +456,26 @@ bool Jet::doTakeoff()
     return drone.takeoff();
 }
 
+bool Jet::doToNormalAltitude()
+{
+    float ex = 0;
+    float ey = 0;
+    float ez = 0;
+    float eyaw = 0;
+
+    if (odom_update_flag == true)
+    {
+        ex = 0; // keep x
+        ey = 0; // keep y
+        ez = normal_altitude - odom_calied.pose.pose.position.z; // adjust altitude
+        eyaw = 0; // keep yaw
+
+        odom_update_flag = false;
+    }
+
+    return pid_control(1, ex, ey, ez, eyaw);
+}
+
 bool Jet::doFlyToCar()
 {
     float ex = 0;
@@ -449,13 +487,13 @@ bool Jet::doFlyToCar()
     {
         ex = dropoint.x - odom_calied.pose.pose.position.x;
         ey = dropoint.y - odom_calied.pose.pose.position.y;
-        ez = 0;
+        ez = 0; // keep altitude
         eyaw = 0;
 
         odom_update_flag = false;
     }
 
-    pid_control(1, ex, ey, ez, eyaw);
+    return pid_control(1, ex, ey, ez, eyaw);
 }
 
 bool Jet::doServeCar()
@@ -469,13 +507,13 @@ bool Jet::doServeCar()
     {
         ex = vision_target_pos.pose.position.x; // * vision_pos_coeff;
         ey = vision_target_pos.pose.position.y; // * vision_pos_coeff;
-        ez = vision_target_pos.pose.position.z - dropoint.z; //dropoint.z - odom_calied.pose.pose.position.z;
+        ez = dropoint.z - vision_target_pos.pose.position.z;
         eyaw = 0;
 
         vision_target_pos_update_flag = false;
     }
 
-    pid_control(0, ex, ey, ez, eyaw); // Body frame
+    return pid_control(0, ex, ey, ez, eyaw); // Body frame
 }
 
 bool Jet::doDropBullets()
@@ -494,13 +532,13 @@ bool Jet::doBackToNormalAltitude()
     {
         ex = 0;
         ey = 0;
-        ez = -takeoff_height - odom_calied.pose.pose.position.z; // normal altitude
+        ez = normal_altitude - odom_calied.pose.pose.position.z; // normal altitude
         eyaw = 0;
 
         odom_update_flag = false;
     }
 
-    pid_control(1, ex, ey, ez, eyaw);
+    return pid_control(1, ex, ey, ez, eyaw);
 }
 
 bool Jet::doFlyBack()
@@ -534,7 +572,7 @@ bool Jet::doVisualServoLanding()
     {
         ex = vision_target_pos.pose.position.x; // * vision_pos_coeff;
         ey = vision_target_pos.pose.position.y; // * vision_pos_coeff;
-        ez = -landing_height - odom_calied.pose.pose.position.z; // normal altitude
+        ez = landing_height - vision_target_pos.pose.position.z;
         eyaw = 0;
 
         vision_target_pos_update_flag = false;
@@ -581,6 +619,10 @@ bool Jet::action(uint8_t cmd)
         case TAKE_OFF:
         std::cout << "\nAction: " << "Takeoff" << std::endl;
         return doTakeoff();
+
+        case TO_NORMAL_ALTITUDE:
+        std::cout << "\nAction: " << "To Normal Altitude" << std::endl;
+        return doToNormalAltitude();
 
         case FLY_TO_CAR:
         std::cout << "\nAction: " << "Fly to Car" << std::endl;
@@ -680,8 +722,28 @@ void Jet::stateMachine()
         {
             tick = 0;
             success = false;
+            jet_state = TO_NORMAL_ALTITUDE;
+            std::cout << "stateMachine: " << "Takeoff->To Normal Altitude" << tick << std::endl;
+        }
+        break;
+
+        case TO_NORMAL_ALTITUDE:
+        if (!success)
+        {
+            success = doTakeoff();
+            std::cout << "stateMachine: " << "To Normal Altitude" << std::endl;
+        }
+        else if (tick < duration[TO_NORMAL_ALTITUDE])
+        {
+            tick++;
+            std::cout << "stateMachine: " << "To Normal Altitude@Tick: " << tick << std::endl;
+        }
+        else
+        {
+            tick = 0;
+            success = false;
             jet_state = FLY_TO_CAR;
-            std::cout << "stateMachine: " << "Takeoff->Fly to Car" << tick << std::endl;
+            std::cout << "stateMachine: " << "To Normal Altitude->Fly to Car" << tick << std::endl;
         }
         break;
 
@@ -857,11 +919,12 @@ void Jet::help()
     printf("+-------------------------- < Main menu > -------------------------+\n");
     printf("| [0]  Stand-by                 | [1]  Grab Bullets                |\n");
 	printf("| [2]  Request Control          | [3]  Takeoff                     |\n");
-	printf("| [4]  Fly to Car               | [5]  Serve Car                   |\n");	
-	printf("| [6]  Drop bullets             | [7]  Back to Normal Altitude     |\n");	
-    printf("| [8]  Fly Back                 | [9]  Visual Servo Landing        |\n");	
-    printf("| [a]  Landing                  | [b]  Jetbang Free Style          |\n");
-    printf("| [c]  Pause Free Style         | [d]  Resume Free Style           |\n");	
+    printf("| [4]  To Normal Altitude       | [5]  Fly to Car                  |\n");
+	printf("| [6]  Serve Car                | [7]  Drop bullets                |\n");	
+	printf("| [8]  Back to Normal Altitude  | [9]  Fly Back                    |\n");	
+    printf("| [a]  Visual Servo Landing     | [b]  Landing                     |\n");	
+    printf("| [c]  Jetbang Free Style       | [d]  Pause Free Style            |\n");
+    printf("| [e]  Resume Free Style        | [f]  Cutoff Free Style           |\n");	
     printf("+------------------------------------------------------------------+\n");
 }
 
@@ -879,13 +942,17 @@ void Jet::spin()
 
         char c = kbhit();
 
-        if (c == 'b' || c == 'd')
+        if (c == 'c' || c == 'e')
         {
             freestyle = true;
         }
-        if (c == 'c')
+        if (c == 'd' || c == 'f')
         {
             freestyle = false;
+        }
+        if (c == 'f')
+        {
+            jet_state = STAND_BY;
         }
 
         if (freestyle)
@@ -897,7 +964,7 @@ void Jet::spin()
         {
             action(c - '0');
         }
-        if (c >= 'a' && c <= 'a')
+        if (c >= 'a' && c <= 'f')
         {
             action(c - 'a' + 10);
         }

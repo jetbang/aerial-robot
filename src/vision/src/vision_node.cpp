@@ -33,6 +33,10 @@ double px = image_width / 2.0;
 double py = image_height / 2.0;
 double tag_size = 0.163513;
 
+double camera_x_offset = 0.175;
+double camera_y_offset = 0;
+double camera_z_offset = 0;
+
 double get_projection_ratio(double circle_pixel_radius)
 {
     double ratio = circle_radius / circle_pixel_radius;
@@ -133,6 +137,9 @@ int main(int argc, char** argv) {
     np.param<double>("image_width", image_width, 640);
     np.param<double>("image_height", image_height, 480);
     np.param<double>("circle_radius", circle_radius, 0.26);
+    np.param<double>("camera_x_offset", camera_x_offset, 0.175);
+    np.param<double>("camera_y_offset", camera_y_offset, 0);
+    np.param<double>("camera_z_offset", camera_z_offset, 0);
 
     AprilTags::TagCodes m_tagCodes(AprilTags::tagCodes16h5);
     if (tag_code == "16h5") {
@@ -194,9 +201,9 @@ int main(int argc, char** argv) {
                     double rx = get_relative_x(circle_detector.m_radius, circle_detector.m_center.x);
                     double ry = get_relative_y(circle_detector.m_radius, circle_detector.m_center.y);
                     double rz = get_relative_z(circle_detector.m_radius);
-                    target_pos.pose.position.x = ry;
-                    target_pos.pose.position.y = -rx;
-                    target_pos.pose.position.z = rz;
+                    target_pos.pose.position.x = ry + camera_x_offset;
+                    target_pos.pose.position.y = -rx + camera_y_offset;
+                    target_pos.pose.position.z = rz + camera_z_offset;
                 }
                 else
                 {
@@ -234,9 +241,9 @@ int main(int argc, char** argv) {
                     double rx = transform(0, 3);
                     double ry = transform(1, 3);
                     double rz = transform(2, 3);
-                    target_pos.pose.position.x = ry; // coordinate transform
-                    target_pos.pose.position.y = -rx;
-                    target_pos.pose.position.z = rz;
+                    target_pos.pose.position.x = ry + camera_x_offset; // coordinate transform
+                    target_pos.pose.position.y = -rx + camera_y_offset;
+                    target_pos.pose.position.z = rz + camera_z_offset;
                     target_pos.pose.orientation.x = rot_quaternion.x();
                     target_pos.pose.orientation.y = rot_quaternion.y();
                     target_pos.pose.orientation.z = rot_quaternion.z();

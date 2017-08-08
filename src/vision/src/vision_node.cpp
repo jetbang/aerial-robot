@@ -27,11 +27,11 @@ uint8_t detection_mode = DETECTION_MODE_NONE;
 
 void jet_state_callback(const std_msgs::UInt8ConstPtr& jet_state_msg)
 {
-    if (jet_state_msg->data == 9)
+    if (jet_state_msg->data == 10)
     {
         detection_mode = DETECTION_MODE_CIRCLE;
     }
-    else if (jet_state_msg->data == 5)
+    else if (jet_state_msg->data == 6)
     {
         detection_mode = DETECTION_MODE_APRILTAGS;
     }

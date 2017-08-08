@@ -194,8 +194,8 @@ int main(int argc, char** argv) {
                     double rx = get_relative_x(circle_detector.m_radius, circle_detector.m_center.x);
                     double ry = get_relative_y(circle_detector.m_radius, circle_detector.m_center.y);
                     double rz = get_relative_z(circle_detector.m_radius);
-                    target_pos.pose.position.x = -ry;
-                    target_pos.pose.position.y = rx;
+                    target_pos.pose.position.x = ry;
+                    target_pos.pose.position.y = -rx;
                     target_pos.pose.position.z = rz;
                 }
                 else
@@ -231,9 +231,12 @@ int main(int argc, char** argv) {
                     //target_pos.pose.position.x = transform(0, 3);
                     //target_pos.pose.position.y = transform(1, 3);
                     //target_pos.pose.position.z = transform(2, 3);
-                    target_pos.pose.position.x = transform(1, 3); // coordinate transform
-                    target_pos.pose.position.y = transform(0, 3);
-                    target_pos.pose.position.z = transform(2, 3);
+                    double rx = transform(0, 3);
+                    double ry = transform(1, 3);
+                    double rz = transform(2, 3);
+                    target_pos.pose.position.x = ry; // coordinate transform
+                    target_pos.pose.position.y = -rx;
+                    target_pos.pose.position.z = rz;
                     target_pos.pose.orientation.x = rot_quaternion.x();
                     target_pos.pose.orientation.y = rot_quaternion.y();
                     target_pos.pose.orientation.z = rot_quaternion.z();

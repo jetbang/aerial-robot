@@ -6,6 +6,7 @@
 -->
 
 	<include file="$(find jet)/launch/cfg.launch"/>
+	<include file="$(find vision)/launch/vision.launch"/>
 
 	<node pkg="jet" type="jet" name="jet" output="screen">
 	<param name="spin_rate"           type="int"    value="50"/>

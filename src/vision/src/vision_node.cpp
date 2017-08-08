@@ -110,6 +110,7 @@ int main(int argc, char** argv) {
         {
             if (!cap.isOpened())
             {
+                std::cout << "opening camera" << std::endl;
                 cap.open(vid);
             }
             cap >> img;

@@ -16,7 +16,8 @@
 
 #include "jet.h"
 
-Jet::Jet(ros::NodeHandle& nh) : drone(nh), uart_fd(-1), calied(false)
+Jet::Jet(ros::NodeHandle& nh) : drone(nh), uart_fd(-1), calied(false), odom_update_flag(false),
+vision_target_pos_update_flag(false)
 {
     this->nh = nh;
 
@@ -43,7 +44,7 @@ Jet::Jet(ros::NodeHandle& nh) : drone(nh), uart_fd(-1), calied(false)
     reload_duration_param_srv = nh.advertiseService("/reload_duration_param", &Jet::reload_duration_param_callback, this);
 
     odometry_sub = nh.subscribe("/guidance/odom", 10, &Jet::odometry_callback, this);
-    vision_sub = nh.subscribe("/vision/pos", 10, &Jet::vision_callback, this);
+    vision_sub = nh.subscribe("/vision/target_pos", 10, &Jet::vision_callback, this);
 
     jet_state_pub = nh.advertise<std_msgs::UInt8>("/jet_state", 10);
     odom_calied_pub = nh.advertise<nav_msgs::Odometry>("/odom_calied", 10);
@@ -52,6 +53,7 @@ Jet::Jet(ros::NodeHandle& nh) : drone(nh), uart_fd(-1), calied(false)
     load_vision_param(nh);
     load_flight_param(nh);
     load_dropoint_param(nh);
+    load_duration_param(nh);
 
     jet_nav_action_server = new JetNavActionServer(nh,
             "jet_nav_action",
@@ -129,6 +131,12 @@ void Jet::load_flight_param(ros::NodeHandle& nh)
 void Jet::load_duration_param(ros::NodeHandle& nh)
 {
     nh.getParam("duration", duration);
+    std::cout << "durations: [" ;
+    for (int i = 0; i < duration.size() - 1; i++)
+    {
+        std::cout << duration[i] << ", " ;
+    }
+    std::cout << duration[duration.size() - 1] << "]" << std::endl;
 }
 
 void Jet::odometry_callback(const nav_msgs::OdometryConstPtr& odometry)
@@ -141,6 +149,7 @@ void Jet::odometry_callback(const nav_msgs::OdometryConstPtr& odometry)
     }
     calc_odom_calied();
     pub_odom_calied();
+    odom_update_flag = true;
 }
 
 void Jet::calc_odom_calied()
@@ -174,6 +183,7 @@ void Jet::pub_jet_state()
 void Jet::vision_callback(const geometry_msgs::PoseStamped& position)
 {
     vision_target_pos = position;
+    vision_target_pos_update_flag = true;
 }
 
 bool Jet::charge_callback(jet::Charge::Request& request, jet::Charge::Response& response)
@@ -278,24 +288,39 @@ bool Jet::goal_reached()
 
 bool Jet::pid_control(uint8_t ground, float x, float y, float z, float yaw)
 {
+    float fx = 0;
+    float fy = 0;
+    float fz = 0;
+    float fyaw = 0;
+
+    float rx = 0;
+    float ry = 0;
+    float rz = 0;
+    float ryaw = 0;
+
+    if (ground)
+    {
+        fx = odom_calied.pose.pose.position.x;
+        fy = odom_calied.pose.pose.position.y;
+        fz = odom_calied.pose.pose.position.z;
+        fyaw = tf::getYaw(odom_calied.pose.pose.orientation);
+    }
+    
+    rx = fx + x;
+    ry = fy + y;
+    rz = fz + z;
+    ryaw = fyaw + yaw;
+
     // x
-    float fx = odom_calied.pose.pose.position.x;
-    float rx = odom_calied.pose.pose.position.x + x;
     PID_Calc(&pid[0], rx, fx);
 
     // y
-    float fy = odom_calied.pose.pose.position.y;
-    float ry = odom_calied.pose.pose.position.y + y;
     PID_Calc(&pid[1], ry, fy);
 
     // z
-    float fz = odom_calied.pose.pose.position.z;
-    float rz = odom_calied.pose.pose.position.z + z;
     PID_Calc(&pid[2], rz, fz);
     
     // yaw
-    float fyaw = tf::getYaw(odom_calied.pose.pose.orientation);
-    float ryaw = fyaw + yaw;
     PID_Calc(&pid[3], ryaw, fyaw);
 
     float ox = pid[0].out;
@@ -339,17 +364,27 @@ bool Jet::jet_nav_action_callback(const jet::JetNavGoalConstPtr& goal)
 
     while (x_progress < 100 || y_progress < 100 || z_progress < 100 || yaw_progress < 100) {
 
-        float x = dst_x - odom_calied.pose.pose.position.x;
-        float y = dst_y - odom_calied.pose.pose.position.y;
-        float z = dst_z - odom_calied.pose.pose.position.z;
-        float yaw = dst_yaw - tf::getYaw(odom_calied.pose.pose.orientation);
+        float ex = 0;
+        float ey = 0;
+        float ez = 0;
+        float eyaw = 0;
 
-        pid_control(1, x, y, z, yaw);
+        if (odom_update_flag == true)
+        {
+            ex = dst_x - odom_calied.pose.pose.position.x;
+            ey = dst_y - odom_calied.pose.pose.position.y;
+            ez = dst_z - odom_calied.pose.pose.position.z;
+            eyaw = dst_yaw - tf::getYaw(odom_calied.pose.pose.orientation);
 
-        float det_x = (100 * x) / dis_x;
-        float det_y = (100 * y) / dis_y;
-        float det_z = (100 * z) / dis_z;
-        float det_yaw = (100 * yaw) / dis_yaw;
+            odom_update_flag = false;
+        }
+
+        pid_control(1, ex, ey, ez, eyaw);
+
+        float det_x = (100 * ex) / dis_x;
+        float det_y = (100 * ey) / dis_y;
+        float det_z = (100 * ez) / dis_z;
+        float det_yaw = (100 * eyaw) / dis_yaw;
 
         x_progress = 100 - (int)det_x;
         y_progress = 100 - (int)det_y;
@@ -405,20 +440,40 @@ bool Jet::doTakeoff()
 
 bool Jet::doFlyToCar()
 {
-    float ex = dropoint.x - odom_calied.pose.pose.position.x;
-    float ey = dropoint.y - odom_calied.pose.pose.position.y;
+    float ex = 0;
+    float ey = 0;
     float ez = 0;
     float eyaw = 0;
+
+    if (odom_update_flag == true)
+    {
+        ex = dropoint.x - odom_calied.pose.pose.position.x;
+        ey = dropoint.y - odom_calied.pose.pose.position.y;
+        ez = 0;
+        eyaw = 0;
+
+        odom_update_flag = false;
+    }
 
     pid_control(1, ex, ey, ez, eyaw);
 }
 
 bool Jet::doServeCar()
 {
-    float ex = vision_target_pos.pose.position.x; // * vision_pos_coeff;
-    float ey = vision_target_pos.pose.position.y; // * vision_pos_coeff;
-    float ez = dropoint.z - odom_calied.pose.pose.position.z;
+    float ex = 0;
+    float ey = 0;
+    float ez = 0;
     float eyaw = 0;
+
+    if (vision_target_pos_update_flag == true) // && odom_update_flag)
+    {
+        ex = vision_target_pos.pose.position.x; // * vision_pos_coeff;
+        ey = vision_target_pos.pose.position.y; // * vision_pos_coeff;
+        ez = vision_target_pos.pose.position.z - dropoint.z; //dropoint.z - odom_calied.pose.pose.position.z;
+        eyaw = 0;
+
+        vision_target_pos_update_flag = false;
+    }
 
     pid_control(0, ex, ey, ez, eyaw); // Body frame
 }
@@ -432,28 +487,58 @@ bool Jet::doBackToNormalAltitude()
 {
     float ex = 0;
     float ey = 0;
-    float ez = -takeoff_height - odom_calied.pose.pose.position.z; // normal altitude
+    float ez = 0;
     float eyaw = 0;
+
+    if (odom_update_flag == true)
+    {
+        ex = 0;
+        ey = 0;
+        ez = -takeoff_height - odom_calied.pose.pose.position.z; // normal altitude
+        eyaw = 0;
+
+        odom_update_flag = false;
+    }
 
     pid_control(1, ex, ey, ez, eyaw);
 }
 
 bool Jet::doFlyBack()
 {
-    float ex = 0 - odom_calied.pose.pose.position.x;
-    float ey = 0 - odom_calied.pose.pose.position.y;
+    float ex = 0;
+    float ey = 0;
     float ez = 0;
     float eyaw = 0;
+
+    if (odom_update_flag == true)
+    {
+        ex = 0 - odom_calied.pose.pose.position.x;
+        ey = 0 - odom_calied.pose.pose.position.y;
+        ez = 0;
+        eyaw = 0;
+
+        odom_update_flag = false;
+    }
 
     pid_control(1, ex, ey, ez, eyaw);
 }
 
 bool Jet::doVisualServoLanding()
 {
-    float ex = vision_target_pos.pose.position.x * vision_pos_coeff;
-    float ey = vision_target_pos.pose.position.y * vision_pos_coeff;
-    float ez = -landing_height - odom_calied.pose.pose.position.z; // normal altitude
+    float ex = 0;
+    float ey = 0;
+    float ez = 0;
     float eyaw = 0;
+
+    if (vision_target_pos_update_flag == true) // && odom_update_flag)
+    {
+        ex = vision_target_pos.pose.position.x; // * vision_pos_coeff;
+        ey = vision_target_pos.pose.position.y; // * vision_pos_coeff;
+        ez = -landing_height - odom_calied.pose.pose.position.z; // normal altitude
+        eyaw = 0;
+
+        vision_target_pos_update_flag = false;
+    }
 
     pid_control(0, ex, ey, ez, eyaw); // Body frame
 }

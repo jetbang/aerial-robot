@@ -139,10 +139,13 @@ protected:
     uint8_t jet_state;
 
     PID_t pid[4];
-    
+
     float vision_pos_coeff;
     float takeoff_height;
     float landing_height;
+
+    bool odom_update_flag;
+    bool vision_target_pos_update_flag;
 
 protected:
     bool cmd_grabber(uint8_t c);

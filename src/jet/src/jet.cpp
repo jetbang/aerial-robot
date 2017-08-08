@@ -17,7 +17,8 @@
 #include "jet.h"
 
 Jet::Jet(ros::NodeHandle& nh) : drone(nh), uart_fd(-1), calied(false), odom_update_flag(false),
-vision_target_pos_update_flag(false), use_guidance(false), freestyle(false)
+vision_target_pos_update_flag(false), use_guidance(false), freestyle(false), car_pos_gdf(NULL),
+park_pos_gdf(NULL)
 {
     this->nh = nh;
 
@@ -27,6 +28,24 @@ vision_target_pos_update_flag(false), use_guidance(false), freestyle(false)
     np.param<std::string>("serial_port", serial_port, "/dev/ttyTHS2"); 
     np.param<int>("serial_baudrate", serial_baudrate, 115200);
     np.param<bool>("use_guidance", use_guidance, false);
+
+    np.param<int>("car_pos_sample_cnt", car_pos_sample_cnt, 3);
+    np.param<int>("park_pos_sample_cnt", park_pos_sample_cnt, 3);
+
+    car_pos_gdf = Gdf_Create(car_pos_sample_cnt);
+
+    if (!car_pos_gdf)
+    {
+        std::cout << "ERROR, cannot create car_pos_gdf" << std::endl;
+        return -1;
+    }
+
+    park_pos_gdf = Gdf_Create(park_pos_sample_cnt);
+    if (!park_pos_gdf)
+    {
+        std::cout << "ERROR, cannot create park_pos_gdf" << std::endl;
+        return -1;
+    }
 
     int ret = uart_open(&uart_fd, serial_port.c_str(), serial_baudrate, UART_OFLAG_WR);
     if (ret < 0) {
@@ -71,6 +90,7 @@ Jet::~Jet()
         close(uart_fd);
         uart_fd = -1;
     }
+    Gdf_Destroy(gdf);
 }
 
 void Jet::load_dropoint_param(ros::NodeHandle& nh)
@@ -497,6 +517,11 @@ bool Jet::doFlyToCar()
     return pid_control(1, ex, ey, ez, eyaw);
 }
 
+bool Jet::doFindCar()
+{
+    return false;
+}
+
 bool Jet::doServeCar()
 {
     float ex = vision_target_pos.pose.position.x;
@@ -530,6 +555,11 @@ bool Jet::doFlyBack()
     float eyaw = 0;
 
     return pid_control(1, ex, ey, ez, eyaw);
+}
+
+bool Jet::doFindPark()
+{
+    return false;
 }
 
 bool Jet::doVisualServoLanding()
@@ -589,6 +619,10 @@ bool Jet::action(uint8_t cmd)
         std::cout << "\nAction: " << "Fly to Car" << std::endl;
         return doFlyToCar();
 
+        case FIND_CAR:
+        std::cout << "\nAction: " << "Find Car" << std::endl;
+        return doFindCar();
+
         case SERVE_CAR:
         std::cout << "\nAction: " << "Serve Car" << std::endl;
         return doServeCar();
@@ -604,6 +638,10 @@ bool Jet::action(uint8_t cmd)
         case FLY_BACK:
         std::cout << "\nAction: " << "Fly Back" << std::endl;
         return doFlyBack();
+
+        case FIND_PARK:
+        std::cout << "\nAction: " << "Find Park" << std::endl;
+        return doFindPark();
 
         case VISUAL_SERVO_LANDING:
         std::cout << "\nAction: " << "Visual Servo Landing" << std::endl;
@@ -743,8 +781,28 @@ void Jet::stateMachine()
         {
             tick = 0;
             success = false;
+            jet_state = FIND_CAR;
+            std::cout << "stateMachine: " << "Fly to Car->Find Car" << tick << std::endl;
+        }
+        break;
+
+        case FIND_CAR:
+        if (!success)
+        {
+            success = doFindCar();
+            std::cout << "stateMachine: " << "Find Car" << std::endl;
+        }
+        else if (tick < duration[FIND_CAR])
+        {
+            tick++;
+            std::cout << "stateMachine: " << "Find Car@Tick: " << tick << std::endl;
+        }
+        else
+        {
+            tick = 0;
+            success = false;
             jet_state = SERVE_CAR;
-            std::cout << "stateMachine: " << "Fly to Car->Serve Car" << tick << std::endl;
+            std::cout << "stateMachine: " << "Find Car->Serve Car" << tick << std::endl;
         }
         break;
 
@@ -823,8 +881,28 @@ void Jet::stateMachine()
         {
             tick = 0;
             success = false;
+            jet_state = FIND_PARK;
+            std::cout << "stateMachine: " << "Fly Back->Find Park" << tick << std::endl;
+        }
+        break;
+
+        case FIND_PARK:
+        if (!success)
+        {
+            success = doFindPark();
+            std::cout << "stateMachine: " << "Find Park" << std::endl;
+        }
+        else if (tick < duration[FIND_PARK])
+        {
+            tick++;
+            std::cout << "stateMachine: " << "Find Park@Tick: " << tick << std::endl;
+        }
+        else
+        {
+            tick = 0;
+            success = false;
             jet_state = VISUAL_SERVO_LANDING;
-            std::cout << "stateMachine: " << "Fly Back->Visual Servo Landing" << tick << std::endl;
+            std::cout << "stateMachine: " << "Find Park->Visual Servo Landing" << tick << std::endl;
         }
         break;
 
@@ -909,12 +987,13 @@ void Jet::help()
     printf("| [0]  Stand-by                 | [1]  Grab Bullets                |\n");
 	printf("| [2]  Request Control          | [3]  Takeoff                     |\n");
     printf("| [4]  To Normal Altitude       | [5]  Fly to Car                  |\n");
-	printf("| [6]  Serve Car                | [7]  Drop bullets                |\n");	
-	printf("| [8]  Back to Normal Altitude  | [9]  Fly Back                    |\n");	
-    printf("| [a]  Visual Servo Landing     | [b]  Landing                     |\n");	
-    printf("| [c]  Release Control          | [d]  Jetbang Free Style          |\n");	
-    printf("| [e]  Pause Free Style         | [f]  Resume Free Style           |\n");
-    printf("| [g]  Cutoff Free Style        | [h]  Help                        |\n");	
+    printf("| [6]  Find Car                 | [7]  Serve Car                   |\n");
+	printf("| [8]  Drop bullets             | [9]  Back to Normal Altitude     |\n");	
+	printf("| [a]  Fly Back                 | [b]  Find Park                   |\n");	
+    printf("| [c]  Visual Servo Landing     | [d]  Landing                     |\n");	
+    printf("| [e]  Release Control          | [f]  Jetbang Free Style          |\n");	
+    printf("| [g]  Pause Free Style         | [h]  Resume Free Style           |\n");
+    printf("| [i]  Cutoff Free Style        | [j]  Help                        |\n");	
     printf("+------------------------------------------------------------------+\n");
 }
 
@@ -930,23 +1009,23 @@ void Jet::spin()
 
         char c = kbhit();
 
-        if (c == 'd')
+        if (c == 'f')
         {
             std::cout << "\nAction: " << "Jetbang Free Style" << std::endl;
             freestyle = true;
             jet_state = STAND_BY;
         }
-        if (c == 'e')
+        if (c == 'g')
         {
             std::cout << "\nAction: " << "Pause Free Style" << std::endl;
             freestyle = false;
         }
-        if (c == 'f')
+        if (c == 'h')
         {
             std::cout << "\nAction: " << "Resume Free Style" << std::endl;
             freestyle = true;
         }
-        if (c == 'g')
+        if (c == 'i')
         {
             std::cout << "\nAction: " << "Cutoff Free Style" << std::endl;
             freestyle = false;
@@ -963,11 +1042,11 @@ void Jet::spin()
         {
             action(c - '0');
         }
-        if (c >= 'a' && c <= 'c')
+        if (c >= 'a' && c <= 'e')
         {
             action(c - 'a' + 10);
         }
-        if (c == 'h')
+        if (c == 'j')
         {
             help();
         }

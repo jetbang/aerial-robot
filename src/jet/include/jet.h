@@ -30,6 +30,7 @@
 #include <dji_sdk/dji_drone.h>
 #include <vector>
 
+#include "gdf.h"
 #include "pid.h"
 #include "uart.h"
 #include "crc8.h"
@@ -53,10 +54,12 @@ public:
         TAKE_OFF,
         TO_NORMAL_ALTITUDE,
         FLY_TO_CAR,
+        FIND_CAR,
         SERVE_CAR,
         DROP_BULLETS,
         BACK_TO_NORMAL_ALTITUDE,
         FLY_BACK,
+        FIND_PARK,
         VISUAL_SERVO_LANDING,
         LANDING,
         RELEASE_CONTROL,
@@ -139,6 +142,13 @@ protected:
     DJIDrone drone;
     uint8_t jet_state;
 
+    int car_pos_sample_cnt;
+    int park_pos_sample_cnt;
+    double car_pos_sample_var_limit;
+    double park_pos_sample_var_limit;
+    Gdf_t* car_pos_gdf;
+    Gdf_t* park_pos_gdf;
+    
     PID_t pid[4];
 
     float vision_pos_coeff;

@@ -52,6 +52,7 @@ include_directories(
 )
 
 add_executable(jet src/jet.cpp
+  src/gdf.cpp
   src/pid.cpp 
   src/uart.cpp 
   src/crc8.cpp

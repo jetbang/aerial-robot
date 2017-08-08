@@ -4,12 +4,14 @@
 # takeoff: 250
 # to normal height: 100
 # fly_to_car: 250
+# find_car
 # serve_car: 100
 # drop_bullets: 100
 # back_to_normal_altitude: 200
 # fly_back: 200
+# find_park: 10
 # visual_servo_landing: 200
 # landing: 200
 # release_control: 10
 
-duration: [10, 50, 5, 350, 10, 10, 10, 10, 10, 10, 10, 220, 10]
+duration: [10, 50, 5, 350, 10, 10, 10, 10, 10, 10, 10, 10, 10, 220, 10]

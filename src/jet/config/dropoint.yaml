@@ -1,2 +1,2 @@
-dropoint: {x: 3.0, y: 3.0, z: 1.0} # xy: position relative to ground, z: height relative to vision target
+dropoint: {x: 1.5, y: 0.79, z: 1.0} # xy: position relative to ground, z: height relative to vision target
 

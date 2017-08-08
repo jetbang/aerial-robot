@@ -1,0 +1,17 @@
+<launch>
+
+  <node pkg="vision" type="vision" name="vision" output="screen">
+
+    <param name="show_image" type="bool" value="true" />
+
+    <param name="vid" type="int" value="0" />
+
+    <param name="fx" type="double" value="488.5" />
+    <param name="fy" type="double" value="489.1" />
+    <param name="px" type="double" value="305.1" />
+    <param name="py" type="double" value="269.8" />
+
+    <param name="tag_code" type="string" value="16h5" />
+    <param name="tag_size" type="double" value="0.163513" />
+  </node>
+</launch>

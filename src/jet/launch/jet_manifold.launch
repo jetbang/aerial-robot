@@ -1,0 +1,23 @@
+<launch>
+<!--
+	<node pkg="guidance" type="guidanceNode" name="guidanceNode" output="screen" />
+
+	<include file="$(find dji_sdk)/launch/sdk_manifold.launch"/>
+-->
+
+	<include file="$(find jet)/launch/cfg.launch"/>
+	<include file="$(find vision)/launch/vision_manifold.launch"/>
+
+	<node pkg="jet" type="jet" name="jet" output="screen">
+	<param name="spin_rate"           type="int"    value="50"/>
+	<param name="serial_port"         type="string" value="/dev/ttyTHS2"/>  
+  	<param name="serial_baudrate"     type="int"    value="115200"/>
+
+	<!--
+	<remap from="/guidance/odom" to="/dji_sdk/odometry" />
+	-->
+	
+	</node>
+
+</launch>
+

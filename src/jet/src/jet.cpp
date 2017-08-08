@@ -471,9 +471,13 @@ bool Jet::doToNormalAltitude()
         eyaw = 0; // keep yaw
 
         odom_update_flag = false;
+
+        return pid_control(1, ex, ey, ez, eyaw);
     }
 
-    return pid_control(1, ex, ey, ez, eyaw);
+    pid_control(1, ex, ey, ez, eyaw); // to ensure control rate
+
+    return false;
 }
 
 bool Jet::doFlyToCar()
@@ -491,9 +495,13 @@ bool Jet::doFlyToCar()
         eyaw = 0;
 
         odom_update_flag = false;
+
+        return pid_control(1, ex, ey, ez, eyaw);
     }
 
-    return pid_control(1, ex, ey, ez, eyaw);
+    pid_control(1, ex, ey, ez, eyaw); // to ensure control rate
+
+    return false;
 }
 
 bool Jet::doServeCar()
@@ -511,9 +519,13 @@ bool Jet::doServeCar()
         eyaw = 0;
 
         vision_target_pos_update_flag = false;
+
+        return pid_control(0, ex, ey, ez, eyaw); // Body frame
     }
 
-    return pid_control(0, ex, ey, ez, eyaw); // Body frame
+    pid_control(0, ex, ey, ez, eyaw); // to ensure control rate
+
+    return false;
 }
 
 bool Jet::doDropBullets()
@@ -536,9 +548,13 @@ bool Jet::doBackToNormalAltitude()
         eyaw = 0;
 
         odom_update_flag = false;
+
+        return pid_control(1, ex, ey, ez, eyaw);
     }
 
-    return pid_control(1, ex, ey, ez, eyaw);
+    pid_control(1, ex, ey, ez, eyaw); // to ensure control rate
+
+    return false;
 }
 
 bool Jet::doFlyBack()
@@ -556,9 +572,13 @@ bool Jet::doFlyBack()
         eyaw = 0;
 
         odom_update_flag = false;
+
+        return pid_control(1, ex, ey, ez, eyaw);
     }
 
-    pid_control(1, ex, ey, ez, eyaw);
+    pid_control(1, ex, ey, ez, eyaw); // to ensure control rate
+    
+    return false;
 }
 
 bool Jet::doVisualServoLanding()
@@ -576,9 +596,13 @@ bool Jet::doVisualServoLanding()
         eyaw = 0;
 
         vision_target_pos_update_flag = false;
+
+        return pid_control(0, ex, ey, ez, eyaw); // Body frame
     }
 
-    pid_control(0, ex, ey, ez, eyaw); // Body frame
+    pid_control(0, ex, ey, ez, eyaw); // to ensure control rate
+    
+    return false;
 }
 
 bool Jet::doLanding()
@@ -750,7 +774,7 @@ void Jet::stateMachine()
         case TO_NORMAL_ALTITUDE:
         if (!success)
         {
-            success = doTakeoff();
+            success = doToNormalAltitude();
             std::cout << "stateMachine: " << "To Normal Altitude" << std::endl;
         }
         else if (tick < duration[TO_NORMAL_ALTITUDE])
@@ -986,7 +1010,7 @@ void Jet::spin()
 
         if (freestyle)
         {
-            std::cout << " FREE STYLE" << std::endl;
+            std::cout << " Jetbang Free Styling" << std::endl;
             stateMachine();
         }
 

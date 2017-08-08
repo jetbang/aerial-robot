@@ -1,4 +1,4 @@
-# standby: 0
+# standby: 10
 # grab_bullets: 100
 # request_control: 10
 # takeoff: 250
@@ -11,4 +11,4 @@
 # landing: 200
 # release_control: 10
 
-duration: [0, 100, 10, 250, 100, 250, 100, 100, 200, 200, 200, 200, 10]
+duration: [10, 200, 10, 350, 400, 450, 200, 300, 400, 400, 300, 200, 10]

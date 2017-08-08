@@ -23,6 +23,46 @@ enum
     DETECTION_MODE_APRILTAGS,
 };
 
+double image_width = 640;
+double image_height = 480;
+double circle_radius = 0.26;
+
+double fx = 600;
+double fy = 600;
+double px = image_width / 2.0;
+double py = image_height / 2.0;
+double tag_size = 0.163513;
+
+double get_projection_ratio(double circle_pixel_radius)
+{
+    double ratio = circle_radius / circle_pixel_radius;
+    return ratio;
+}
+
+double get_relative_x(double circle_pixel_radius, double circle_pixel_center_x)
+{
+    double dpx = circle_pixel_center_x - px;
+    double ratio = circle_radius / circle_pixel_radius;
+    double rx = dpx * ratio;
+    return rx;
+}
+
+double get_relative_y(double circle_pixel_radius, double circle_pixel_center_y)
+{
+    double dpy = circle_pixel_center_y - py;
+    double ratio = circle_radius / circle_pixel_radius;
+    double ry = dpy * ratio;
+    return ry;
+}
+
+double get_relative_z(double circle_pixel_radius)
+{
+    double f = (fx + fy) / 2.0;
+    double ratio = circle_radius / circle_pixel_radius;
+    double rz = f * circle_radius / circle_pixel_radius;
+    return rz;
+}
+
 uint8_t detection_mode = DETECTION_MODE_NONE;
 
 bool detect_tag_only = false;
@@ -83,13 +123,16 @@ int main(int argc, char** argv) {
     np.param<int>("jet_state_detect_circle", jet_state_detect_circle, 10);
 
     std::string tag_code;
-    double fx, fy, px, py, tag_size;
+    
     np.param<double>("fx", fx, 600);
     np.param<double>("fy", fy, 600);
     np.param<double>("px", px, 320);
     np.param<double>("py", py, 240);
     np.param<std::string>("tag_code", tag_code, "16h5");
     np.param<double>("tag_size", tag_size, 0.163513);
+    np.param<double>("image_width", image_width, 640);
+    np.param<double>("image_height", image_height, 480);
+    np.param<double>("circle_radius", circle_radius, 0.26);
 
     AprilTags::TagCodes m_tagCodes(AprilTags::tagCodes16h5);
     if (tag_code == "16h5") {
@@ -148,14 +191,17 @@ int main(int argc, char** argv) {
                 {
                     if (show_image)
                         circle_detector.draw(img);
-                    target_pos.pose.position.x = circle_detector.m_center.x;
-                    target_pos.pose.position.x = circle_detector.m_center.y;
-                    target_pos.pose.position.z = circle_detector.m_radius;
+                    double rx = get_relative_x(circle_detector.m_radius, circle_detector.m_center.x);
+                    double ry = get_relative_y(circle_detector.m_radius, circle_detector.m_center.y);
+                    double rz = get_relative_z(circle_detector.m_radius);
+                    target_pos.pose.position.x = -ry;
+                    target_pos.pose.position.y = rx;
+                    target_pos.pose.position.z = rz;
                 }
                 else
                 {
                     target_pos.pose.position.x = 0;
-                    target_pos.pose.position.x = 0;
+                    target_pos.pose.position.y = 0;
                     target_pos.pose.position.z = 0;
                 }
 
@@ -182,8 +228,11 @@ int main(int argc, char** argv) {
                     Eigen::Matrix3d rot = transform.block(0, 0, 3, 3);
                     Eigen::Quaternion<double> rot_quaternion = Eigen::Quaternion<double>(rot);
 
-                    target_pos.pose.position.x = transform(0, 3);
-                    target_pos.pose.position.y = transform(1, 3);
+                    //target_pos.pose.position.x = transform(0, 3);
+                    //target_pos.pose.position.y = transform(1, 3);
+                    //target_pos.pose.position.z = transform(2, 3);
+                    target_pos.pose.position.x = transform(1, 3); // coordinate transform
+                    target_pos.pose.position.y = transform(0, 3);
                     target_pos.pose.position.z = transform(2, 3);
                     target_pos.pose.orientation.x = rot_quaternion.x();
                     target_pos.pose.orientation.y = rot_quaternion.y();
@@ -193,7 +242,7 @@ int main(int argc, char** argv) {
                 else
                 {
                     target_pos.pose.position.x = 0;
-                    target_pos.pose.position.x = 0;
+                    target_pos.pose.position.y = 0;
                     target_pos.pose.position.z = 0;
                     target_pos.pose.orientation = tf::createQuaternionMsgFromYaw(0);
                 }

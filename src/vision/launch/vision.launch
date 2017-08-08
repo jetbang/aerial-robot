@@ -12,6 +12,10 @@
     <param name="px" type="double" value="320" />
     <param name="py" type="double" value="240" />
 
+    <param name="image_width" type="double" value="640" />
+    <param name="image_height" type="double" value="480" />
+    <param name="circle_radius" type="double" value="0.26" />
+
     <param name="jet_state_detect_apriltag" type="int" value="6" />
     <param name="jet_state_detect_circle" type="int" value="10" />
 

@@ -667,6 +667,26 @@ void Jet::stateMachine()
     static uint32_t tick = 0;
     switch (jet_state)
     {
+        case STAND_BY:
+        if (!success)
+        {
+            success = doStandby();
+            std::cout << "stateMachine: " << "Standby" << std::endl;
+        }
+        else if (tick < duration[STAND_BY])
+        {
+            tick++;
+            std::cout << "stateMachine: " << "Standby@Tick: " << tick << std::endl;
+        }
+        else
+        {
+            tick = 0;
+            success = false;
+            jet_state = GRAB_BULLETS;
+            std::cout << "stateMachine: " << "Standby->Grab Bullets" << tick << std::endl;
+        }
+        break;
+
         case GRAB_BULLETS:
         if (!success)
         {
@@ -941,26 +961,32 @@ void Jet::spin()
 
         char c = kbhit();
 
-        if (c == 'c' || c == 'e')
+        if (c == 'd')
         {
+            std::cout << "\nAction: " << "Jetbang Free Style" << std::endl;
             freestyle = true;
+            jet_state = STAND_BY;
         }
-        if (c == 'd' || c == 'f')
+        if (c == 'e')
         {
+            std::cout << "\nAction: " << "Pause Free Style" << std::endl;
             freestyle = false;
-        }
-        if (c == 'c')
-        {
-            if (jet_state = STAND_BY)
-                jet_state = GRAB_BULLETS;
         }
         if (c == 'f')
         {
+            std::cout << "\nAction: " << "Resume Free Style" << std::endl;
+            freestyle = true;
+        }
+        if (c == 'g')
+        {
+            std::cout << "\nAction: " << "Cutoff Free Style" << std::endl;
+            freestyle = false;
             jet_state = STAND_BY;
         }
 
         if (freestyle)
         {
+            std::cout << " FREE STYLE" << std::endl;
             stateMachine();
         }
 

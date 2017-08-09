@@ -21,7 +21,7 @@
     <param name="camera_z_offset" type="double" value="0" />
 
     <param name="jet_state_detect_apriltag" type="int" value="6" />
-    <param name="jet_state_detect_circle" type="int" value="10" />
+    <param name="jet_state_detect_circle" type="int" value="11" />
 
     <param name="tag_code" type="string" value="16h5" />
     <param name="tag_size" type="double" value="0.163513" />

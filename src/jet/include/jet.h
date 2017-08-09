@@ -29,8 +29,9 @@
 
 #include <dji_sdk/dji_drone.h>
 #include <vector>
+#include <iostream> 
+#include <iomanip>  
 
-#include "gdf.h"
 #include "pid.h"
 #include "uart.h"
 #include "crc8.h"
@@ -85,7 +86,7 @@ protected:
     ros::Subscriber vision_sub;
 
     ros::Publisher jet_state_pub;
-    ros::Publisher odom_calied_pub;
+    ros::Publisher pose_calied_pub;
 
     ros::ServiceServer charge_srv;
     ros::ServiceServer cmd_grabber_srv;
@@ -101,22 +102,12 @@ protected:
     jet::JetNavFeedback jet_nav_feedback;
     jet::JetNavResult jet_nav_result;
 
-    nav_msgs::Odometry odom;
-    nav_msgs::Odometry odom_bias;
-    nav_msgs::Odometry odom_calied;
-    bool calied;
-
-    geometry_msgs::PoseStamped vision_target_relative_pos;
-    geometry_msgs::PoseStamped vision_target_global_pos;
-
-    double jet_yaw, jet_yaw_bias, jet_yaw_calied;
-    double vision_target_relative_yaw, vision_target_global_yaw;
-
     geometry_msgs::Vector3 dropoint;
 
 protected:
-    void calc_odom_calied();
-    void pub_odom_calied();
+    void calc_jet_pos_calied();
+    void pub_pose_calied();
+
     void pub_jet_state();
 
     void load_dropoint_param(ros::NodeHandle& nh);
@@ -130,7 +121,7 @@ protected:
 protected:
     // subscriber callbacks
     void odometry_callback(const nav_msgs::OdometryConstPtr& odometry);
-    void vision_callback(const geometry_msgs::PoseStamped& position);
+    void vision_callback(const geometry_msgs::PoseStamped& pose_stamped);
 
     // service callbacks
     bool charge_callback(jet::Charge::Request& request, jet::Charge::Response& response);
@@ -156,15 +147,30 @@ protected:
     Timer odom_callback_timer;
     Timer vision_callback_timer;
 
+    bool calied;
+
+    float jet_pos_raw[4];
+    float jet_pos_bias[4];
+    float jet_pos_calied[4];
+
+    geometry_msgs::PoseStamped pose_calied;
+
+    float vision_target_local_pos_raw[4];
+    float vision_target_global_pos_raw[4];
+
+    int vision_target_pos_filter_window_size;
+    double vision_target_pos_filter_variance_limit;
+    std::vector<float> vision_target_local_pos_vec[4]; // X,Y,Z,YAW
+    float vision_target_local_pos_est[4];
+    float vision_target_global_pos_est[4];
+    bool vision_target_pos_confirmed;
+
     PID_t pid[4];
 
     float vision_pos_coeff;
     float takeoff_height;
     float landing_height;
     float normal_altitude;
-
-    bool odom_update_flag;
-    bool vision_target_pos_update_flag;
 
     bool use_guidance;
     bool freestyle;
@@ -196,6 +202,7 @@ public:
 
     bool cmd_jet_state(uint8_t cmd);
     bool action(uint8_t cmd);
+    void vision_cali();
     void stateMachine();
     void spin();
 

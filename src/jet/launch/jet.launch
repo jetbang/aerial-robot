@@ -15,6 +15,9 @@
 	<param name="serial_port"         type="string" value="/dev/ttyUSB1"/>  
   	<param name="serial_baudrate"     type="int"    value="115200"/>
 
+	<param name="vision_target_pos_filter_window_size"   type="int"    value="5"/>
+	<param name="vision_target_pos_filter_variance_limit"   type="double"    value="1e-5"/>
+
 	<param name="use_guidance"        type="bool"   value="false" />
 	
 	<remap from="/odom_raw" to="/dji_sdk/odometry" />

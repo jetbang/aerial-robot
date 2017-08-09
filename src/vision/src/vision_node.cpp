@@ -124,7 +124,7 @@ int main(int argc, char** argv) {
     np.param<bool>("show_image", show_image, true);
     np.param<bool>("detect_tag_only", detect_tag_only, true);
     np.param<int>("jet_state_detect_apriltag", jet_state_detect_apriltag, 6);
-    np.param<int>("jet_state_detect_circle", jet_state_detect_circle, 10);
+    np.param<int>("jet_state_detect_circle", jet_state_detect_circle, 11);
 
     std::string tag_code;
     

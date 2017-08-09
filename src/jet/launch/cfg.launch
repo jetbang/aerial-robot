@@ -4,5 +4,6 @@
 	<rosparam command="load" file="$(find jet)/config/flight.yaml" />
 	<rosparam command="load" file="$(find jet)/config/dropoint.yaml" />
 	<rosparam command="load" file="$(find jet)/config/duration.yaml" />
+	<rosparam command="load" file="$(find jet)/config/timeout.yaml" />
 </launch>
 

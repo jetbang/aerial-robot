@@ -167,9 +167,6 @@ int main(int argc, char** argv) {
 
     cv::Mat img, img_gray;
 
-    geometry_msgs::PoseStamped target_pos;
-    std_msgs::UInt8 detection_mode_msg;
-
     bool detected = false;
     bool window_created = false;
 
@@ -188,12 +185,7 @@ int main(int argc, char** argv) {
             if (detection_mode == DETECTION_MODE_CIRCLE)
             {
                 detected = circle_detector.detect(img);
-
-                target_pos.header.stamp = ros::Time::now();
-                target_pos.header.frame_id = "circle";
                 
-                target_pos.pose.orientation = tf::createQuaternionMsgFromYaw(0);
-
                 if (detected)
                 {
                     if (show_image)
@@ -201,19 +193,20 @@ int main(int argc, char** argv) {
                     double rx = get_relative_x(circle_detector.m_radius, circle_detector.m_center.x);
                     double ry = get_relative_y(circle_detector.m_radius, circle_detector.m_center.y);
                     double rz = get_relative_z(circle_detector.m_radius);
+
+                    geometry_msgs::PoseStamped target_pos;
+
+                    target_pos.header.stamp = ros::Time::now();
+                    target_pos.header.frame_id = "circle";
+
                     target_pos.pose.position.x = ry + camera_x_offset;
                     target_pos.pose.position.y = -rx + camera_y_offset;
                     target_pos.pose.position.z = rz + camera_z_offset;
-                }
-                else
-                {
-                    target_pos.pose.position.x = 0;
-                    target_pos.pose.position.y = 0;
-                    target_pos.pose.position.z = 0;
-                }
 
-                target_pos_pub.publish(target_pos);
-                
+                    target_pos.pose.orientation = tf::createQuaternionMsgFromYaw(0);
+
+                    target_pos_pub.publish(target_pos);
+                }
             }
             else if (detection_mode == DETECTION_MODE_APRILTAGS)
             {
@@ -222,9 +215,6 @@ int main(int argc, char** argv) {
                 ROS_DEBUG("%d tag detected", (int)tag_detections.size());
 
                 detected = tag_detections.size() > 0;
-
-                target_pos.header.stamp = ros::Time::now();
-                target_pos.header.frame_id = "apriltag";
 
                 if (detected)
                 {
@@ -241,6 +231,12 @@ int main(int argc, char** argv) {
                     double rx = transform(0, 3);
                     double ry = transform(1, 3);
                     double rz = transform(2, 3);
+
+                    geometry_msgs::PoseStamped target_pos;
+
+                    target_pos.header.stamp = ros::Time::now();
+                    target_pos.header.frame_id = "apriltag";
+
                     target_pos.pose.position.x = ry + camera_x_offset; // coordinate transform
                     target_pos.pose.position.y = -rx + camera_y_offset;
                     target_pos.pose.position.z = rz + camera_z_offset;
@@ -248,17 +244,9 @@ int main(int argc, char** argv) {
                     target_pos.pose.orientation.y = rot_quaternion.y();
                     target_pos.pose.orientation.z = rot_quaternion.z();
                     target_pos.pose.orientation.w = rot_quaternion.w();
-                }
-                else
-                {
-                    target_pos.pose.position.x = 0;
-                    target_pos.pose.position.y = 0;
-                    target_pos.pose.position.z = 0;
-                    target_pos.pose.orientation = tf::createQuaternionMsgFromYaw(0);
-                }
 
-                target_pos_pub.publish(target_pos);
-                
+                    target_pos_pub.publish(target_pos);
+                }
             }
 
             if (show_image)
@@ -278,6 +266,7 @@ int main(int argc, char** argv) {
             cap.release(); 
         }
         
+        std_msgs::UInt8 detection_mode_msg;
         detection_mode_msg.data = detection_mode;
         detection_mode_pub.publish(detection_mode_msg);
 

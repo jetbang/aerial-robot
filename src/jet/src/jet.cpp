@@ -17,8 +17,8 @@
 #include "jet.h"
 
 Jet::Jet(ros::NodeHandle& nh) : drone(nh), uart_fd(-1), calied(false), odom_update_flag(false),
-vision_target_pos_update_flag(false), use_guidance(false), freestyle(false), car_pos_gdf(NULL),
-park_pos_gdf(NULL)
+vision_target_pos_update_flag(false), use_guidance(false), freestyle(false), 
+odom_callback_timer(60), vision_callback_timer(500)
 {
     this->nh = nh;
 
@@ -29,29 +29,18 @@ park_pos_gdf(NULL)
     np.param<int>("serial_baudrate", serial_baudrate, 115200);
     np.param<bool>("use_guidance", use_guidance, false);
 
-    np.param<int>("car_pos_sample_cnt", car_pos_sample_cnt, 3);
-    np.param<int>("park_pos_sample_cnt", park_pos_sample_cnt, 3);
-
-    car_pos_gdf = Gdf_Create(car_pos_sample_cnt);
-
-    if (!car_pos_gdf)
-    {
-        std::cout << "ERROR, cannot create car_pos_gdf" << std::endl;
-        return -1;
-    }
-
-    park_pos_gdf = Gdf_Create(park_pos_sample_cnt);
-    if (!park_pos_gdf)
-    {
-        std::cout << "ERROR, cannot create park_pos_gdf" << std::endl;
-        return -1;
-    }
-
     int ret = uart_open(&uart_fd, serial_port.c_str(), serial_baudrate, UART_OFLAG_WR);
     if (ret < 0) {
         fprintf(stderr, "Error, cannot bind to the specified serial port %s.\n"
                 , serial_port.c_str());
     }
+
+    load_pid_param(nh);
+    load_vision_param(nh);
+    load_flight_param(nh);
+    load_dropoint_param(nh);
+    load_duration_param(nh);
+    load_timeout_param(nh);
 
     charge_srv = nh.advertiseService("/charge", &Jet::charge_callback, this);
     cmd_grabber_srv = nh.advertiseService("/grabber/cmd", &Jet::cmd_grabber_callback, this);
@@ -69,12 +58,6 @@ park_pos_gdf(NULL)
     jet_state_pub = nh.advertise<std_msgs::UInt8>("/jet_state", 10);
     odom_calied_pub = nh.advertise<nav_msgs::Odometry>("/odom_calied", 10);
 
-    load_pid_param(nh);
-    load_vision_param(nh);
-    load_flight_param(nh);
-    load_dropoint_param(nh);
-    load_duration_param(nh);
-
     jet_nav_action_server = new JetNavActionServer(nh,
             "jet_nav_action",
             boost::bind(&Jet::jet_nav_action_callback, this, _1), false);
@@ -90,7 +73,6 @@ Jet::~Jet()
         close(uart_fd);
         uart_fd = -1;
     }
-    Gdf_Destroy(gdf);
 }
 
 void Jet::load_dropoint_param(ros::NodeHandle& nh)
@@ -162,8 +144,17 @@ void Jet::load_duration_param(ros::NodeHandle& nh)
     std::cout << duration[duration.size() - 1] << "]" << std::endl;
 }
 
+void Jet::load_timeout_param(ros::NodeHandle& nh)
+{
+    nh.param<int>("odom_callback_timeout", odom_callback_timeout, 60);
+    nh.param<int>("vision_callback_timeout", vision_callback_timeout, 500);
+    std::cout << "odom_callback_timeout: " << odom_callback_timeout << std::endl;
+    std::cout << "vision_callback_timeout: " << vision_callback_timeout << std::endl;
+}
+
 void Jet::odometry_callback(const nav_msgs::OdometryConstPtr& odometry)
 {
+    odom_callback_timer.reset(odom_callback_timeout);
     odom = *odometry;
     if (use_guidance) // revert z if use guidance
     {
@@ -181,10 +172,11 @@ void Jet::odometry_callback(const nav_msgs::OdometryConstPtr& odometry)
 
 void Jet::calc_odom_calied()
 {
-    double yaw = tf::getYaw(odom.pose.pose.orientation);
-    double yaw_bias = tf::getYaw(odom_bias.pose.pose.orientation);
-    double yaw_calied = yaw - yaw_bias;
-    geometry_msgs::Quaternion quat_calied = tf::createQuaternionMsgFromYaw(yaw_calied);
+    jet_yaw = tf::getYaw(odom.pose.pose.orientation);
+    jet_yaw_bias = tf::getYaw(odom_bias.pose.pose.orientation);
+    jet_yaw_calied = jet_yaw - jet_yaw_bias;
+
+    geometry_msgs::Quaternion quat_calied = tf::createQuaternionMsgFromYaw(jet_yaw_calied);
 
     odom_calied.header = odom.header;
     odom_calied.child_frame_id = odom.child_frame_id;
@@ -209,7 +201,20 @@ void Jet::pub_jet_state()
 
 void Jet::vision_callback(const geometry_msgs::PoseStamped& position)
 {
-    vision_target_pos = position;
+    vision_callback_timer.reset(vision_callback_timeout);
+    vision_target_relative_pos = position;
+
+    // tf
+    vision_target_global_pos.header = position.header;
+
+    vision_target_relative_yaw = tf::getYaw(position.pose.orientation);
+    vision_target_global_yaw = jet_yaw_calied + vision_target_relative_yaw;
+    
+    vision_target_global_pos.pose.position.x = odom_calied.pose.pose.position.x + vision_target_global_pos.pose.position.x;
+    vision_target_global_pos.pose.position.y = odom_calied.pose.pose.position.y + vision_target_global_pos.pose.position.y;
+    vision_target_global_pos.pose.position.z = odom_calied.pose.pose.position.z + vision_target_global_pos.pose.position.z;
+    vision_target_global_pos.pose.orientation = tf::createQuaternionMsgFromYaw(vision_target_global_yaw);
+
     vision_target_pos_update_flag = true;
 }
 
@@ -262,6 +267,12 @@ bool Jet::reload_vision_param_callback(std_srvs::Empty::Request& request, std_sr
 bool Jet::reload_flight_param_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response)
 {
     load_flight_param(nh);
+    return true;
+}
+
+bool Jet::reload_timeout_param_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response)
+{
+    load_timeout_param(nh);
     return true;
 }
 
@@ -327,18 +338,6 @@ bool Jet::goal_reached()
 
 bool Jet::pid_control(uint8_t ground, float x, float y, float z, float yaw)
 {
-    if (ground && odom_update_flag == false)
-    {
-        control(ground, 0, 0, 0, 0); // Just to ensure control rate
-        return false;
-    }
-
-    if ((!ground) && vision_target_pos_update_flag == false)
-    {
-        control(ground, 0, 0, 0, 0); // Just to ensure control rate
-        return false;
-    }
-
     float fx = 0;
     float fy = 0;
     float fz = 0;
@@ -355,7 +354,6 @@ bool Jet::pid_control(uint8_t ground, float x, float y, float z, float yaw)
         fy = odom_calied.pose.pose.position.y;
         fz = odom_calied.pose.pose.position.z;
         fyaw = tf::getYaw(odom_calied.pose.pose.orientation);
-        odom_update_flag = false; // clear odom update flag
     }
     else
     {
@@ -363,7 +361,6 @@ bool Jet::pid_control(uint8_t ground, float x, float y, float z, float yaw)
         fy = 0;
         fz = 0;
         fyaw = 0;
-        vision_target_pos_update_flag = false;
     }
     
     rx = fx + x;
@@ -423,20 +420,10 @@ bool Jet::jet_nav_action_callback(const jet::JetNavGoalConstPtr& goal)
 
     while (x_progress < 100 || y_progress < 100 || z_progress < 100 || yaw_progress < 100) {
 
-        float ex = 0;
-        float ey = 0;
-        float ez = 0;
-        float eyaw = 0;
-
-        if (odom_update_flag == true)
-        {
-            ex = dst_x - odom_calied.pose.pose.position.x;
-            ey = dst_y - odom_calied.pose.pose.position.y;
-            ez = dst_z - odom_calied.pose.pose.position.z;
-            eyaw = dst_yaw - tf::getYaw(odom_calied.pose.pose.orientation);
-
-            odom_update_flag = false;
-        }
+        float ex = dst_x - odom_calied.pose.pose.position.x;
+        float ey = dst_y - odom_calied.pose.pose.position.y;
+        float ez = dst_z - odom_calied.pose.pose.position.z;
+        float eyaw = dst_yaw - tf::getYaw(odom_calied.pose.pose.orientation);
 
         pid_control(1, ex, ey, ez, eyaw);
 
@@ -519,17 +506,22 @@ bool Jet::doFlyToCar()
 
 bool Jet::doFindCar()
 {
+    if (vision_target_pos_update_flag)
+    {
+        vision_target_pos_update_flag = false;
+        return true;
+    }
     return false;
 }
 
 bool Jet::doServeCar()
 {
-    float ex = vision_target_pos.pose.position.x;
-    float ey = vision_target_pos.pose.position.y;
-    float ez = dropoint.z - vision_target_pos.pose.position.z;
+    float ex = vision_target_global_pos.pose.position.x - odom_calied.pose.pose.position.x;
+    float ey = vision_target_global_pos.pose.position.y - odom_calied.pose.pose.position.y;
+    float ez = dropoint.z + vision_target_global_pos.pose.position.z - odom_calied.pose.pose.position.z;
     float eyaw = 0;
 
-    return pid_control(0, ex, ey, ez, eyaw);
+    return pid_control(1, ex, ey, ez, eyaw);
 }
 
 bool Jet::doDropBullets()
@@ -559,17 +551,22 @@ bool Jet::doFlyBack()
 
 bool Jet::doFindPark()
 {
+    if (vision_target_pos_update_flag)
+    {
+        vision_target_pos_update_flag = false;
+        return true;
+    }
     return false;
 }
 
 bool Jet::doVisualServoLanding()
 {
-    float ex = vision_target_pos.pose.position.x;
-    float ey = vision_target_pos.pose.position.y;
-    float ez = landing_height - vision_target_pos.pose.position.z;
+    float ex = vision_target_global_pos.pose.position.x - odom_calied.pose.pose.position.x;
+    float ey = vision_target_global_pos.pose.position.y - odom_calied.pose.pose.position.y;
+    float ez = landing_height + vision_target_global_pos.pose.position.z - odom_calied.pose.pose.position.z;
     float eyaw = 0;
 
-    return pid_control(0, ex, ey, ez, eyaw);
+    return pid_control(1, ex, ey, ez, eyaw);
 }
 
 bool Jet::doLanding()

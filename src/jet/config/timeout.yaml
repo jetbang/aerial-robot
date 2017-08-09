@@ -1,0 +1,2 @@
+odom_callback_timeout: 60
+vision_callback_timeout: 500

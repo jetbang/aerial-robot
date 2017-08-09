@@ -56,6 +56,7 @@ add_executable(jet src/jet.cpp
   src/pid.cpp 
   src/uart.cpp 
   src/crc8.cpp
+  src/timer.cpp
   src/kbhit.cpp
 )
 

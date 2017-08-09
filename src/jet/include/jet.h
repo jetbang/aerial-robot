@@ -34,6 +34,7 @@
 #include "pid.h"
 #include "uart.h"
 #include "crc8.h"
+#include "timer.h"
 #include "kbhit.h"
 
 #include "jet/Charge.h"
@@ -104,7 +105,12 @@ protected:
     nav_msgs::Odometry odom_bias;
     nav_msgs::Odometry odom_calied;
     bool calied;
-    geometry_msgs::PoseStamped vision_target_pos;
+
+    geometry_msgs::PoseStamped vision_target_relative_pos;
+    geometry_msgs::PoseStamped vision_target_global_pos;
+
+    double jet_yaw, jet_yaw_bias, jet_yaw_calied;
+    double vision_target_relative_yaw, vision_target_global_yaw;
 
     geometry_msgs::Vector3 dropoint;
 
@@ -119,6 +125,7 @@ protected:
     void load_vision_param(ros::NodeHandle& nh);
     void load_flight_param(ros::NodeHandle& nh);
     void load_duration_param(ros::NodeHandle& nh);
+    void load_timeout_param(ros::NodeHandle& nh);
 
 protected:
     // subscriber callbacks
@@ -134,6 +141,7 @@ protected:
     bool reload_flight_param_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);
     bool reload_dropoint_param_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);
     bool reload_duration_param_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);
+    bool reload_timeout_param_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);
 
     // action callbacks
     bool jet_nav_action_callback(const jet::JetNavGoalConstPtr& goal);
@@ -142,13 +150,12 @@ protected:
     DJIDrone drone;
     uint8_t jet_state;
 
-    int car_pos_sample_cnt;
-    int park_pos_sample_cnt;
-    double car_pos_sample_var_limit;
-    double park_pos_sample_var_limit;
-    Gdf_t* car_pos_gdf;
-    Gdf_t* park_pos_gdf;
-    
+    int odom_callback_timeout;
+    int vision_callback_timeout;
+
+    Timer odom_callback_timer;
+    Timer vision_callback_timer;
+
     PID_t pid[4];
 
     float vision_pos_coeff;
@@ -177,10 +184,12 @@ public:
     bool doTakeoff();
     bool doToNormalAltitude();
     bool doFlyToCar();
+    bool doFindCar();
     bool doServeCar();
     bool doDropBullets();
     bool doBackToNormalAltitude();
     bool doFlyBack();
+    bool doFindPark();
     bool doVisualServoLanding();
     bool doLanding();
     bool doReleaseControl();

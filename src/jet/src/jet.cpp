@@ -248,7 +248,7 @@ void Jet::vision_callback(const geometry_msgs::PoseStamped& pose_stamped)
                 }
                 vision_target_local_pos_est[i] = sum[i] / vision_target_pos_filter_window_size;
                 vision_target_global_pos_est[i] = vision_target_local_pos_est[i] + jet_pos_calied[i];
-                std::cout << "vision_target_local_pos_est[" << i << "]" << vision_target_local_pos_est[i] << std::endl;
+                std::cout << "vision_target_local_pos_est[" << i << "]: " << vision_target_local_pos_est[i] << std::endl;
             }
             for (int i = 0; i < 4; i++)
             {
@@ -446,21 +446,24 @@ bool Jet::pid_control(uint8_t ground, float x, float y, float z, float yaw)
 
     for (int i = 0; i < 4; i++)
     {
-        std::cout << std::fixed << std::setprecision(3) << ref[i] << "\t";
+        //std::cout << std::fixed << std::setprecision(3) << ref[i] << "\t";
+        printf("%.3f", ref[i]);
     }
 
     std::cout << std::endl;
 
     for (int i = 0; i < 4; i++)
     {
-        std::cout << std::fixed << std::setprecision(3) << fdb[i] << "\t";
+        //std::cout << std::fixed << std::setprecision(3) << fdb[i] << "\t";
+        printf("%.3f", fdb[i]);
     }
 
     std::cout << std::endl;
 
     for (int i = 0; i < 4; i++)
     {
-        std::cout << std::fixed << std::setprecision(3) << out[i] << "\t";
+        //std::cout << std::fixed << std::setprecision(3) << out[i] << "\t";
+        printf("%.3f", out[i]);
     }
 
     std::cout << std::endl;

@@ -1,6 +1,6 @@
 pid: {
- xy: {kp: 1.0, ki: 0.1, kd: 0.1, db: 0.1, it: 0.2, Emax: 2, Pmax: 2, Imax: 0.5, Dmax: 0, Omax: 2},
- z: {kp: 1.0, ki: 0.1, kd: 0.1, db: 0.1, it: 0.2, Emax: 2, Pmax: 2, Imax: 0.5, Dmax: 0, Omax: 2},
- yaw: {kp: 1.0, ki: 0.1, kd: 0.1, db: 0.1, it: 0, Emax: 2, Pmax: 2, Imax: 0.5, Dmax: 0, Omax: 2}
+ xy: {kp: 1.0, ki: 0.1, kd: 0.1, db: 0.1, it: 0.2, Emax: 1.0, Pmax: 2, Imax: 0.5, Dmax: 0, Omax: 1.5},
+ z: {kp: 1.0, ki: 0.1, kd: 0.1, db: 0.1, it: 0.2, Emax: 1.0, Pmax: 2, Imax: 0.5, Dmax: 0, Omax: 1.5},
+ yaw: {kp: 1.0, ki: 0.1, kd: 0.1, db: 0.1, it: 0, Emax: 1.0, Pmax: 2, Imax: 0.5, Dmax: 0, Omax: 1.5}
 }
 
